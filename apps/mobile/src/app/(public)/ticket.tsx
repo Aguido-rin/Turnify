@@ -1,0 +1,636 @@
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
+
+import { Button, Card, Icon, IconButton, Sheet } from '@/components/ui';
+import { CalledGuestTicket } from '@/components/customer/called-guest-ticket';
+import { CompletedGuestTicket } from '@/components/customer/completed-guest-ticket';
+import { CustomerPage, CustomerState, StatusBadge } from '@/components/customer/customer-ui';
+import { Palette, Radius, space, TypeScale } from '@/constants/theme';
+import { DEFAULT_DEMO_TICKET, useGuestFlow } from '@/features/public/guest-flow-session';
+import { GuestTicketRequests } from '@/features/public/guest-ticket-requests';
+import { guestRatingState } from '@/features/public/guest-rating';
+import { canRespondToGuestCall, queueMetrics } from '@/features/public/guest-ticket-display';
+import { canUseGuestTicket } from '@/features/public/public-route-policy';
+import {
+  cancelGuestTicket,
+  getGuestTicketState,
+  rateFinishedGuestTicket,
+  respondToCalledGuestTicket,
+  type GuestTicketState,
+} from '@/features/queue/public-guest-ticket-api';
+import { translateQueueError } from '@/features/queue/queue-api';
+import { canCancelTicket, presentTicketStatus, ticketPosition } from '@/features/queue/ticket-presentation';
+import { getSupabase } from '@/lib/supabase';
+
+function initials(name: string): string {
+  const letters = name.split(' ').filter(Boolean).slice(0, 2).map((part) => Array.from(part)[0]).filter(Boolean);
+  return (letters.join('') || 'T').toUpperCase();
+}
+
+/**
+ * Anonymous guests receive no Realtime rows (RLS only serves owners and
+ * staff), so the focused ticket screen repolls its RPC state on this cadence.
+ */
+const GUEST_TICKET_POLL_MS = 10_000;
+
+function TicketHeader({ isLoading, updatedAt, error, onBack, onRefresh }: { isLoading: boolean; updatedAt: Date | null; error: string | null; onBack: () => void; onRefresh: () => void }) {
+  return (
+    <View style={styles.header}>
+      <IconButton accessibilityLabel="Volver al inicio" name="arrow-left" onPress={onBack} tone="ghost" />
+      <View style={styles.headerTitle}>
+        <Text style={[TypeScale.eyebrow, { color: Palette.inkFaint }]}>Turnify</Text>
+        <Text style={[TypeScale.headline, { color: Palette.ink }]}>Turno activo</Text>
+        <Text accessibilityLiveRegion="polite" style={[TypeScale.caption, { color: Palette.inkMuted }]}>
+          {error ? 'No se pudo actualizar · ' : ''}{updatedAt ? `Actualizado ${new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit' }).format(updatedAt)}` : 'Sin actualización reciente'}
+        </Text>
+      </View>
+      <IconButton
+        accessibilityLabel="Actualizar turno"
+        disabled={isLoading}
+        name="refresh"
+        onPress={onRefresh}
+        tone="ghost"
+      />
+    </View>
+  );
+}
+
+function QueueTimeline({ peopleAhead, status }: { peopleAhead: number | null; status: 'en_espera' | 'notificado' }) {
+  const notified = status === 'notificado';
+
+  return (
+    <View
+      accessibilityLabel={notified ? 'Progreso: turno notificado y aún en espera' : 'Progreso: turno en espera'}
+      style={styles.timeline}
+    >
+      <View style={styles.timelineItem}>
+        <View style={[styles.timelineDot, styles.timelineDotComplete]}>
+          <Icon color="#FFFFFF" name="check" size={12} strokeWidth={3} />
+        </View>
+        <View style={styles.timelineCopy}>
+          <Text style={[TypeScale.bodyStrong, { color: Palette.ink }]}>Turno solicitado</Text>
+          <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>Tu código ya está registrado.</Text>
+        </View>
+      </View>
+
+      <View style={[styles.timelineLine, styles.timelineLineComplete]} />
+
+      <View style={styles.timelineItem}>
+        <View style={[styles.timelineDot, styles.timelineDotActive]}>
+          <View style={styles.timelineDotInner} />
+        </View>
+        <View style={styles.timelineCopy}>
+          <Text style={[TypeScale.bodyStrong, { color: Palette.brand }]}>{notified ? 'Notificado' : 'En espera'}</Text>
+          <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>Posición actual: {peopleAhead === null ? 'sin datos' : ticketPosition(peopleAhead)}.</Text>
+        </View>
+      </View>
+
+      <View style={styles.timelineLine} />
+
+      <View style={styles.timelineItem}>
+        <View style={styles.timelineDot} />
+        <View style={styles.timelineCopy}>
+          <Text style={[TypeScale.bodyStrong, { color: Palette.ink }]}>Llamado en el local</Text>
+          <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>Mira la pantalla o escucha tu código.</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export default function GuestTicketScreen() {
+  const { ticketAccess, endGuestTicketSession, settleGuestTicket, demoTicket, draft } = useGuestFlow();
+  const [ticket, setTicket] = useState<GuestTicketState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const shopName = draft?.catalog.name ?? null;
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [isResponding, setIsResponding] = useState(false);
+  const [isRating, setIsRating] = useState(false);
+  const [voted, setVoted] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [isConfirmingCancel, setIsConfirmingCancel] = useState(false);
+  const requests = useRef(new GuestTicketRequests()).current;
+  const actionPending = useRef(false);
+  requests.setIdentity(ticketAccess);
+  const metrics = ticket ? queueMetrics(ticket) : null;
+
+  const returnHome = useCallback(() => {
+    router.replace('/');
+  }, []);
+
+  const startNewTicket = useCallback(() => {
+    requests.invalidate();
+    endGuestTicketSession();
+    router.replace('/');
+  }, [endGuestTicketSession, requests]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (ticket && ticketAccess && ticket.status === 'finalizado' && guestRatingState(ticket, now) !== 'pending') {
+      settleGuestTicket(ticketAccess, ticket);
+    }
+  }, [now, settleGuestTicket, ticket, ticketAccess]);
+
+  const prevStatus = useRef<GuestTicketState['status'] | null>(null);
+  useEffect(() => {
+    const status = ticket?.status ?? null;
+    if (prevStatus.current !== 'llamado' && status === 'llamado') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    }
+    prevStatus.current = status;
+  }, [ticket?.status]);
+
+  const refresh = useCallback(async () => {
+    if (process.env.EXPO_PUBLIC_SKIP_AUTH === '1') {
+      const source = demoTicket ?? DEFAULT_DEMO_TICKET;
+      setTicket({
+        visibleCode: source.visibleCode,
+        status: source.status,
+        peopleAhead: source.peopleAhead,
+        waitMinutes: source.waitMinutes,
+        serviceName: source.serviceName,
+        requestedBarberName: null,
+        assignedBarberName: source.barberName,
+        calledDeadlineAt: null,
+        customerResponse: null,
+        customerResponseAt: null,
+        puntuacion: null,
+        canRate: false,
+        ratingDeadlineAt: null,
+        graciaMin: null,
+      });
+      setError(null);
+      setIsLoading(false);
+      setUpdatedAt(new Date());
+      return true;
+    }
+
+    if (!ticketAccess || actionPending.current) return false;
+    setIsLoading(true);
+    return requests.refresh(ticketAccess, getGuestTicketState, (nextTicket) => {
+      setTicket(nextTicket);
+      setUpdatedAt(new Date());
+      settleGuestTicket(ticketAccess, nextTicket);
+      setError(null);
+    }, (reason) => {
+      setError(translateQueueError(reason instanceof Error ? reason.message : ''));
+    }, () => {
+      setIsLoading(false);
+    });
+  }, [demoTicket, requests, settleGuestTicket, ticketAccess]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      requests.setActive(true);
+      let channel: ReturnType<ReturnType<typeof getSupabase>['channel']> | undefined;
+
+      async function start() {
+        const foundTicket = await refresh();
+        if (!isActive || !foundTicket || !ticketAccess || !requests.matches(ticketAccess)) return;
+        channel = getSupabase()
+          .channel(`guest-ticket:${ticketAccess.ticketId}`)
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'tickets', filter: `id=eq.${ticketAccess.ticketId}` },
+            () => {
+              void refresh();
+            },
+          )
+          .subscribe((subscriptionStatus) => {
+            if (subscriptionStatus === 'SUBSCRIBED') void refresh();
+          });
+      }
+
+      const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+        if (nextState === 'active') void refresh();
+      });
+      void start();
+
+      const poll = setInterval(() => {
+        void refresh();
+      }, GUEST_TICKET_POLL_MS);
+
+      return () => {
+        isActive = false;
+        requests.setActive(false);
+        appStateSubscription.remove();
+        clearInterval(poll);
+        if (channel) void getSupabase().removeChannel(channel);
+      };
+    }, [refresh, requests, ticketAccess]),
+  );
+
+  const status = ticket ? presentTicketStatus(ticket.status) : null;
+  const canCancel = ticket ? canCancelTicket(ticket.status) : false;
+  const barberName = ticket?.assignedBarberName ?? ticket?.requestedBarberName ?? null;
+
+  async function cancel() {
+    if (!ticketAccess || !canCancel || error || actionPending.current) return;
+    actionPending.current = true;
+    requests.invalidate();
+    setIsCancelling(true);
+    try {
+      await cancelGuestTicket(ticketAccess);
+      if (!requests.matches(ticketAccess)) return;
+      setIsConfirmingCancel(false);
+      actionPending.current = false;
+      await refresh();
+    } catch (reason) {
+      if (requests.matches(ticketAccess)) setError(translateQueueError(reason instanceof Error ? reason.message : ''));
+    } finally {
+      actionPending.current = false;
+      setIsCancelling(false);
+    }
+  }
+
+  async function respond(response: NonNullable<GuestTicketState['customerResponse']>) {
+    if (!ticketAccess || ticket?.status !== 'llamado' || error || !canRespondToGuestCall(ticket) || actionPending.current) return;
+    actionPending.current = true;
+    requests.invalidate();
+    setIsResponding(true);
+    try {
+      await respondToCalledGuestTicket(ticketAccess, response);
+      if (!requests.matches(ticketAccess)) return;
+      actionPending.current = false;
+      await refresh();
+    } catch (reason) {
+      if (requests.matches(ticketAccess)) setError(translateQueueError(reason instanceof Error ? reason.message : ''));
+    } finally {
+      actionPending.current = false;
+      setIsResponding(false);
+    }
+  }
+
+  async function rate(puntos: number) {
+    const access = ticketAccess;
+    if (!access || !ticket || error || ticket.status !== 'finalizado' || guestRatingState(ticket) !== 'pending' || isRating || actionPending.current) return;
+    actionPending.current = true;
+    requests.invalidate();
+    setIsRating(true);
+    try {
+      await rateFinishedGuestTicket(access, puntos);
+      if (!requests.matches(access)) return;
+      setVoted(puntos);
+      settleGuestTicket(access, { ...ticket, puntuacion: puntos, canRate: false });
+    } catch {
+      setError('No pudimos confirmar tu puntuación. Actualiza el turno antes de reintentar.');
+    } finally {
+      actionPending.current = false;
+      setIsRating(false);
+    }
+  }
+
+  if (ticket && status?.isActiveTurn) {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
+        <TicketHeader isLoading={isLoading} updatedAt={updatedAt} error={error} onBack={returnHome} onRefresh={() => void refresh()} />
+        <CustomerPage>
+          <CalledGuestTicket
+            error={error}
+            isResponding={isResponding || !!error}
+            onRespond={(response) => void respond(response)}
+            onRetry={() => void refresh()}
+            ticket={ticket}
+          />
+        </CustomerPage>
+      </SafeAreaView>
+    );
+  }
+
+  if (ticket && (status?.isCompletedTurn || ticket.status === 'ausente')) {
+    return (
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
+        <CustomerPage>
+          <Text accessibilityLiveRegion="polite" style={[TypeScale.caption, { color: Palette.inkMuted }]}>{error ? 'No se pudo actualizar · ' : ''}{updatedAt ? `Actualizado ${new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit' }).format(updatedAt)}` : 'Sin actualización reciente'}</Text>
+          <CompletedGuestTicket
+            error={error}
+            onNewTicket={startNewTicket}
+            onRetry={() => void refresh()}
+            onReturn={returnHome}
+            ticket={ticket}
+            puntuacion={voted ?? ticket.puntuacion}
+            isRating={isRating || !!error}
+            ratingState={voted != null ? 'rated' : guestRatingState(ticket, now)}
+            onRate={(puntos) => void rate(puntos)}
+          />
+        </CustomerPage>
+      </SafeAreaView>
+    );
+  }
+
+  if (!ticket && !canUseGuestTicket(ticketAccess) && !demoTicket) {
+    return (
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
+        <CustomerPage>
+          <CustomerState
+            action={returnHome}
+            detail="Por privacidad, necesitas conservar el acceso del turno en este dispositivo."
+            label="No hay un turno disponible en esta sesión."
+          />
+        </CustomerPage>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
+      <TicketHeader isLoading={isLoading} updatedAt={updatedAt} error={error} onBack={returnHome} onRefresh={() => void refresh()} />
+      <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
+        {isLoading && !ticket ? <CustomerState isLoading label="Actualizando tu turno…" /> : null}
+        {error ? <CustomerState action={() => void refresh()} label={error} /> : null}
+        {ticket && status ? (
+          <>
+            <View style={styles.contextRow}>
+              <View style={styles.businessIdentity}>
+                <View style={styles.brandMark}>
+                  <Text style={styles.brandMarkText}>T</Text>
+                </View>
+                <View>
+                  <Text style={[TypeScale.bodyStrong, { color: Palette.ink }]}>{shopName ?? 'Turnify'}</Text>
+                  <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>
+                    {shopName ? 'Tu turno en esta barbería' : 'Tu turno en la barbería'}
+                  </Text>
+                </View>
+              </View>
+              <StatusBadge status={ticket.status} />
+            </View>
+
+            {isLoading ? <Text style={styles.refreshing}>Actualizando…</Text> : null}
+
+            <Card elevated padding="lg">
+              <View style={styles.heroTop}>
+                <View style={styles.heroCopy}>
+                  <Text style={styles.heroEyebrow}>Código de turno</Text>
+                  <Text
+                    accessibilityLabel={`Código de turno ${ticket.visibleCode}`}
+                    style={[TypeScale.metric, { color: Palette.ink }]}
+                  >
+                    {ticket.visibleCode}
+                  </Text>
+                </View>
+                <View style={styles.heroIcon}>
+                  <Icon color={Palette.brand} name="ticket" size={24} />
+                </View>
+              </View>
+              <Text style={[TypeScale.body, { color: Palette.inkMuted }]}>{status.message}</Text>
+              <Text style={[TypeScale.bodyStrong, { color: Palette.ink }]}>
+                Cuando lo digan en el local, acércate y muestra este código.
+              </Text>
+
+              {ticket.status === 'en_espera' || ticket.status === 'notificado' ? (
+                <View style={styles.heroStats}>
+                  <View style={styles.heroStat}>
+                    <View style={styles.heroStatIcon}>
+                      <Icon color={Palette.brand} name="users" size={15} />
+                    </View>
+                    <View style={styles.heroStatCopy}>
+                      <Text style={[TypeScale.title, { color: Palette.ink }]}>
+                         {metrics?.ahead}
+                      </Text>
+                      <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>
+                         delante de ti
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.heroStat}>
+                    <View style={[styles.heroStatIcon, styles.heroStatIconGold]}>
+                      <Icon color={Palette.goldDeep} name="clock" size={15} />
+                    </View>
+                    <View style={styles.heroStatCopy}>
+                      <Text
+                         accessibilityLabel={`Espera aproximada ${metrics?.wait}`}
+                        style={[TypeScale.title, { color: Palette.goldInk }]}
+                      >
+                         {metrics?.wait}
+                      </Text>
+                      <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>espera aprox.</Text>
+                    </View>
+                  </View>
+                </View>
+              ) : null}
+            </Card>
+
+            {ticket.status === 'en_atencion' ? (
+              <Card padding="lg" tone="brand">
+                <View style={styles.factRow}>
+                  {barberName ? (
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{initials(barberName)}</Text>
+                    </View>
+                  ) : (
+                    <Icon color={Palette.brand} name="scissors" size={24} />
+                  )}
+                  <View style={styles.factCopy}>
+                    <Text style={styles.factLabel}>{barberName ? `Te atiende ${barberName}` : 'Te están atendiendo'}</Text>
+                    <Text style={[TypeScale.body, { color: Palette.ink }]}>Permanece en tu lugar hasta que termine.</Text>
+                  </View>
+                </View>
+                <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>
+                  Si ya terminó y esto no cambia, toca Actualizar arriba.
+                </Text>
+              </Card>
+            ) : null}
+
+            {ticket.status === 'en_espera' || ticket.status === 'notificado' ? (
+              <Card padding="md">
+                <Text style={[TypeScale.h3, { color: Palette.ink }]}>Progreso de tu turno</Text>
+                 <QueueTimeline peopleAhead={Number.isInteger(ticket.peopleAhead) && ticket.peopleAhead >= 0 ? ticket.peopleAhead : null} status={ticket.status} />
+              </Card>
+            ) : null}
+
+            {ticket.serviceName || barberName ? (
+              <Card padding="md">
+                {ticket.serviceName ? (
+                  <View style={styles.factRow}>
+                    <View style={styles.factIcon}>
+                      <Icon color={Palette.brand} name="ticket" size={19} />
+                    </View>
+                    <View style={styles.factCopy}>
+                      <Text style={styles.factLabel}>Servicio elegido</Text>
+                      <Text style={[TypeScale.body, { color: Palette.ink }]}>{ticket.serviceName}</Text>
+                    </View>
+                  </View>
+                ) : null}
+                {barberName ? (
+                  <View style={styles.factRow}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{initials(barberName)}</Text>
+                    </View>
+                    <View style={styles.factCopy}>
+                      <Text style={styles.factLabel}>
+                        {ticket.assignedBarberName ? 'Te atiende' : 'Preferencia (se confirma al llamarte)'}
+                      </Text>
+                      <Text style={[TypeScale.body, { color: Palette.ink }]}>{barberName}</Text>
+                    </View>
+                  </View>
+                ) : null}
+              </Card>
+            ) : null}
+
+            {status.showsQueueProgress ? (
+              <Card padding="md" tone="brand">
+                <View style={styles.infoIcon}>
+                  <Icon color={Palette.brand} name="info" size={20} />
+                </View>
+                <Text style={[TypeScale.bodyStrong, { color: Palette.ink }]}>Atención en el local</Text>
+                <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>
+                  Conserva el código {ticket.visibleCode}. Lo verás en pantalla o lo escucharás cuando sea tu turno.
+                </Text>
+              </Card>
+            ) : null}
+
+            {canCancel ? (
+              <Button
+                accessibilityLabel="Cancelar turno"
+                disabled={!!error || isLoading}
+                fullWidth
+                label="Cancelar turno"
+                onPress={() => setIsConfirmingCancel(true)}
+                size="md"
+                variant="secondary"
+              />
+            ) : null}
+          </>
+        ) : null}
+      </ScrollView>
+
+      <Sheet
+        confirmLabel="Confirmar cancelación"
+        confirmVariant="danger"
+        description="Perderás tu lugar actual en la fila. Podrás sacar otro turno enseguida si quieres."
+        dismissible={!isCancelling}
+        onClose={() => setIsConfirmingCancel(false)}
+        onConfirm={() => void cancel()}
+        title="¿Cancelar tu turno?"
+        visible={isConfirmingCancel}
+      >
+        {isCancelling ? <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>Cancelando…</Text> : null}
+      </Sheet>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: { backgroundColor: Palette.canvas, flex: 1 },
+  header: {
+    alignItems: 'center',
+    backgroundColor: Palette.canvas,
+    borderBottomColor: Palette.border,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 58,
+    paddingHorizontal: space(4),
+  },
+  headerTitle: { alignItems: 'center', gap: 1 },
+  page: { alignSelf: 'center', gap: space(4), maxWidth: 520, padding: space(4), paddingBottom: space(7), width: '100%' },
+
+  contextRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  businessIdentity: { alignItems: 'center', flexDirection: 'row', gap: space(2.5) },
+  brandMark: {
+    alignItems: 'center',
+    backgroundColor: Palette.brand,
+    borderRadius: Radius.small,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
+  brandMarkText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  refreshing: { color: Palette.inkMuted, marginTop: -space(3) },
+
+  heroTop: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' },
+  heroCopy: { flex: 1, gap: space(1) },
+  heroEyebrow: { color: Palette.inkFaint, letterSpacing: 1 },
+  heroIcon: {
+    alignItems: 'center',
+    backgroundColor: Palette.brandSoft,
+    borderRadius: Radius.medium,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+  },
+  heroStats: { flexDirection: 'row', flexWrap: 'wrap', gap: space(2) },
+  heroStat: {
+    alignItems: 'center',
+    backgroundColor: Palette.brandSoftest,
+    borderColor: Palette.brandBorder,
+    borderRadius: Radius.medium,
+    borderWidth: 1,
+    flex: 1,
+    flexBasis: 140,
+    gap: space(1.5),
+    justifyContent: 'center',
+    minHeight: 68,
+    paddingHorizontal: space(2.5),
+    paddingVertical: space(2.5),
+  },
+  heroStatIcon: {
+    alignItems: 'center',
+    backgroundColor: Palette.brandSoft,
+    borderRadius: Radius.pill,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  heroStatIconGold: { backgroundColor: Palette.goldSoft },
+  heroStatCopy: { alignItems: 'center', gap: 1 },
+
+  timeline: { paddingTop: space(1) },
+  timelineItem: { alignItems: 'flex-start', flexDirection: 'row', gap: space(3) },
+  timelineDot: {
+    alignItems: 'center',
+    backgroundColor: Palette.surface,
+    borderColor: Palette.borderStrong,
+    borderRadius: Radius.pill,
+    borderWidth: 2,
+    height: 20,
+    justifyContent: 'center',
+    width: 20,
+  },
+  timelineDotComplete: { backgroundColor: Palette.brand, borderColor: Palette.brand },
+  timelineDotActive: { borderColor: Palette.brandBright },
+  timelineDotInner: { backgroundColor: Palette.brandBright, borderRadius: 3, height: 7, width: 7 },
+  timelineLine: { backgroundColor: Palette.border, height: 24, marginLeft: 9, width: 2 },
+  timelineLineComplete: { backgroundColor: Palette.brand },
+  timelineCopy: { flex: 1, paddingBottom: 1 },
+
+  factRow: { alignItems: 'center', flexDirection: 'row', gap: space(3) },
+  factIcon: {
+    alignItems: 'center',
+    backgroundColor: Palette.brandSoft,
+    borderRadius: Radius.small,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  avatar: {
+    alignItems: 'center',
+    backgroundColor: Palette.brand,
+    borderRadius: Radius.pill,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  avatarText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  factCopy: { flex: 1, gap: 2 },
+  factLabel: { color: Palette.inkFaint, letterSpacing: 0.7 },
+
+  infoIcon: {
+    alignItems: 'center',
+    backgroundColor: Palette.surface,
+    borderRadius: Radius.small,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+});

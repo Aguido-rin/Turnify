@@ -1,0 +1,32 @@
+recursos/
+node_modules/
+.expo/
+dist/
+.env
+.env*.local
+*.log
+supabase/.temp/
+
+# Expo (apps/mobile)
+web-build/
+.kotlin/
+*.tsbuildinfo
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.metro-health-check*
+.codegraph/
+.atl/
+
+# generated native folders
+apps/mobile/ios/
+apps/mobile/android/
+
+# Firebase Android client configuration is public and intentionally tracked.
+!apps/mobile/google-services.json
+
+# Firebase service-account private keys must never be committed.
+**/*service-account*.json

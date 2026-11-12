@@ -1,0 +1,37 @@
+{
+  "name": "turnify",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "mobile": "npm --workspace turnify-mobile run start",
+    "mobile:web": "npm --workspace turnify-mobile run web",
+    "mobile:android": "npm --workspace turnify-mobile run android",
+    "web": "npm --workspace turnify-web run dev",
+    "build:web": "npm --workspace turnify-web run build",
+    "build:mobile": "npx --workspace turnify-mobile expo export --platform web",
+    "typecheck": "npm --workspace turnify-mobile run typecheck && npm --workspace turnify-web run typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:mobile": "vitest run tests/mobile tests/domain",
+    "test:web": "vitest run tests/web",
+    "test:domain": "vitest run tests/domain",
+    "test:supabase": "vitest run tests/supabase"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "overrides": {
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  }
+}

@@ -1,0 +1,12 @@
+# Minimal Supabase config for local development
+# Docs: https://supabase.com/docs/guides/cli
+
+project_id = "turnify"
+
+[api]
+enabled = true
+
+# This cron-only dispatcher validates its own dedicated bearer token before any
+# work. Gateway JWT verification must stay enabled for every other function.
+[functions.dispatch-ticket-calls]
+verify_jwt = false
