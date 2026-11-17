@@ -1,4 +1,10 @@
-export type BusinessRubro =
+import type {
+  CommercialBarber,
+  CommercialCatalog,
+  CommercialService,
+} from '@/features/queue/commercial-queue-api';
+
+export type BusinessCategory =
   | 'barberia'
   | 'salud'
   | 'atencion_cliente'
@@ -6,141 +12,180 @@ export type BusinessRubro =
   | 'retail'
   | 'general';
 
-export type BusinessCategoryFilter = 'all' | BusinessRubro;
+export type BusinessRubro = BusinessCategory;
 
-export interface DemoServiceItem {
-  id: string;
-  nombre: string;
-  duracionMin: number;
-  precio?: number;
-}
-
-export interface DemoStaffItem {
-  id: string;
-  nombre: string;
-  especialidad?: string;
-}
-
-export interface DirectoryBusiness {
-  id: string;
-  nombre: string;
-  codigo: string;
-  rubro: BusinessRubro;
-  etiquetaAtendedor: string;
-  descripcion: string;
-  direccion: string;
-  abierta: boolean;
-  latitud?: number | null;
-  longitud?: number | null;
-  estimatedWaitMin: number;
+export type BusinessDirectoryEntry = {
+  businessId: string;
+  code: string;
+  name: string;
+  district: string;
+  distanceKm: number;
+  etaMinutes: number;
+  isOpen: boolean;
+  category: BusinessCategory;
+  categoryLabel: string;
+  staffLabel: string;
   requiresSpecificStaff: boolean;
-  servicios: DemoServiceItem[];
-  atendedores: DemoStaffItem[];
-}
-
-export const BUSINESS_CATEGORY_OPTIONS: Array<{
-  id: BusinessCategoryFilter;
-  label: string;
-  icon: string;
-}> = [
-  { id: 'all', label: 'Todas', icon: 'apps' },
-  { id: 'barberia', label: 'Barberías', icon: 'cut' },
-  { id: 'salud', label: 'Salud', icon: 'medkit' },
-  { id: 'atencion_cliente', label: 'Trámites', icon: 'business' },
-  { id: 'gastronomia', label: 'Restaurantes', icon: 'restaurant' },
-  { id: 'retail', label: 'Comercio', icon: 'bag-handle' },
-];
-
-const RUBRO_LABELS: Record<BusinessRubro, string> = {
-  barberia: 'Barbería y Estética',
-  salud: 'Salud y Consultorios',
-  atencion_cliente: 'Atención y Trámites',
-  gastronomia: 'Restaurantes y Cafeterías',
-  retail: 'Retail y Comercio',
-  general: 'Atención General',
+  catalog: CommercialCatalog;
 };
 
-const DEFAULT_STAFF_ROLE_LABELS: Record<BusinessRubro, string> = {
-  barberia: 'Barbero / Estilista',
-  salud: 'Médico / Especialista',
-  atencion_cliente: 'Asesor / Módulo',
-  gastronomia: 'Anfitrión / Barra',
-  retail: 'Asesor / Caja',
+export type BarberDirectoryEntry = BusinessDirectoryEntry;
+export type DirectoryBusiness = BusinessDirectoryEntry;
+
+const catalog = (
+  name: string,
+  isOpen: boolean,
+  services: CommercialService[],
+  barbers: CommercialBarber[]
+): CommercialCatalog => ({
+  name,
+  open: isOpen,
+  services,
+  barbers,
+});
+
+const service = (
+  id: string,
+  name: string,
+  description: string,
+  minutes: number
+): CommercialService => ({
+  serviceId: id,
+  name,
+  description,
+  estimatedDurationSeconds: minutes * 60,
+  measuredDurationSeconds: null,
+  referencePriceCents: null,
+});
+
+const staff = (
+  id: string,
+  name: string,
+  state: CommercialBarber['operationalState'],
+  serviceIds: string[]
+): CommercialBarber => ({
+  barberId: id,
+  name,
+  operationalState: state,
+  fotoUrl: null,
+  serviceIds,
+});
+
+export const BARBER_DISTRICTS = ['Todos', 'Miraflores', 'San Isidro', 'Barranco'] as const;
+export type BarberDistrict = (typeof BARBER_DISTRICTS)[number];
+
+export const BUSINESS_CATEGORIES = [
+  'Todos',
+  'Barberías',
+  'Salud',
+  'Atención',
+  'Restaurantes',
+  'Comercio',
+] as const;
+export type CategoryFilter = (typeof BUSINESS_CATEGORIES)[number];
+export type BusinessCategoryFilter = CategoryFilter;
+
+const CATEGORY_LABELS: Record<BusinessCategory, string> = {
+  barberia: 'Barbería',
+  salud: 'Salud',
+  atencion_cliente: 'Atención',
+  gastronomia: 'Restaurante',
+  retail: 'Comercio',
+  general: 'General',
+};
+
+const DEFAULT_STAFF_LABELS: Record<BusinessCategory, string> = {
+  barberia: 'Barbero',
+  salud: 'Médico',
+  atencion_cliente: 'Asesor',
+  gastronomia: 'Anfitrión',
+  retail: 'Asesor',
   general: 'Profesional',
 };
 
-/**
- * Directorio demo ultraligero:
- * - Exactamente 1 barbería mínima de referencia
- * - 2 rubros adicionales sencillos para validar escalabilidad multirrubro
- */
-export const DEMO_BUSINESS_DIRECTORY: DirectoryBusiness[] = [
+export const BUSINESS_DIRECTORY: BusinessDirectoryEntry[] = [
   {
-    id: 'demo-barberia-01',
-    nombre: 'Turnify Barbería Demo',
-    codigo: 'BARBERIA-DEMO',
-    rubro: 'barberia',
-    etiquetaAtendedor: 'Barbero',
-    descripcion: 'Cortes clásicos y arreglo de barba con atención por orden de llegada.',
-    direccion: 'Av. Larco 450, Miraflores',
-    abierta: true,
-    latitud: -12.1219,
-    longitud: -77.0297,
-    estimatedWaitMin: 15,
+    businessId: 'dir-barberia-01',
+    code: 'BARBERIA-DEMO',
+    name: 'Barbería Estilo Demo',
+    district: 'Miraflores',
+    distanceKm: 0.5,
+    etaMinutes: 5,
+    isOpen: true,
+    category: 'barberia',
+    categoryLabel: 'Barbería',
+    staffLabel: 'Barbero',
     requiresSpecificStaff: true,
-    servicios: [
-      { id: 'srv-barb-1', nombre: 'Corte clásico', duracionMin: 30, precio: 35 },
-      { id: 'srv-barb-2', nombre: 'Corte + barba', duracionMin: 45, precio: 50 },
-    ],
-    atendedores: [
-      { id: 'stf-barb-1', nombre: 'Carlos Méndez', especialidad: 'Corte y degradado' },
-      { id: 'stf-barb-2', nombre: 'Diego Salas', especialidad: 'Barba y estilo clásico' },
-    ],
+    catalog: catalog(
+      'Barbería Estilo Demo',
+      true,
+      [
+        service('svc-b-cut', 'Corte clásico', 'Corte de cabello y peinado.', 30),
+        service('svc-b-beard', 'Corte + barba', 'Corte integral y perfilado.', 45),
+      ],
+      [
+        staff('barb-001', 'Carlos Méndez', 'disponible', ['svc-b-cut', 'svc-b-beard']),
+        staff('barb-002', 'Diego Salas', 'disponible', ['svc-b-cut', 'svc-b-beard']),
+      ]
+    ),
   },
   {
-    id: 'demo-salud-01',
-    nombre: 'Clínica Sanitas Demo',
-    codigo: 'SALUD-DEMO',
-    rubro: 'salud',
-    etiquetaAtendedor: 'Médico / Especialista',
-    descripcion: 'Consultas ambulatorias y triaje rápido sin hacer fila presencial.',
-    direccion: 'Av. Javier Prado Este 1120, San Isidro',
-    abierta: true,
-    latitud: -12.0908,
-    longitud: -77.0226,
-    estimatedWaitMin: 20,
+    businessId: 'dir-salud-01',
+    code: 'CLINICA-DEMO',
+    name: 'Centro Médico Sanitas Demo',
+    district: 'San Isidro',
+    distanceKm: 1.2,
+    etaMinutes: 8,
+    isOpen: true,
+    category: 'salud',
+    categoryLabel: 'Salud',
+    staffLabel: 'Médico',
     requiresSpecificStaff: true,
-    servicios: [
-      { id: 'srv-sal-1', nombre: 'Medicina general', duracionMin: 20 },
-      { id: 'srv-sal-2', nombre: 'Triaje y control', duracionMin: 10 },
-    ],
-    atendedores: [
-      { id: 'stf-sal-1', nombre: 'Dra. Elena Ríos', especialidad: 'Medicina General' },
-    ],
+    catalog: catalog(
+      'Centro Médico Sanitas Demo',
+      true,
+      [
+        service('svc-s-med', 'Medicina general', 'Consulta médica y evaluación rápida.', 20),
+        service('svc-s-triage', 'Triaje y control', 'Toma de presión, signos vitales y vacunas.', 15),
+      ],
+      [
+        staff('med-001', 'Dra. Valeria Gómez', 'disponible', ['svc-s-med', 'svc-s-triage']),
+        staff('med-002', 'Dr. Andrés Paz', 'disponible', ['svc-s-med']),
+      ]
+    ),
   },
   {
-    id: 'demo-tramites-01',
-    nombre: 'Centro de Atención Ciudadana Demo',
-    codigo: 'TRAMITES-DEMO',
-    rubro: 'atencion_cliente',
-    etiquetaAtendedor: 'Asesor / Módulo',
-    descripcion: 'Ventanilla única para gestiones rápidas y orientación ciudadana.',
-    direccion: 'Jr. de la Unión 310, Centro',
-    abierta: true,
-    latitud: -12.0464,
-    longitud: -77.0324,
-    estimatedWaitMin: 10,
+    businessId: 'dir-atencion-01',
+    code: 'TRAMITES-DEMO',
+    name: 'Atención al Ciudadano Demo',
+    district: 'Barranco',
+    distanceKm: 1.8,
+    etaMinutes: 4,
+    isOpen: true,
+    category: 'atencion_cliente',
+    categoryLabel: 'Atención',
+    staffLabel: 'Asesor',
     requiresSpecificStaff: false,
-    servicios: [
-      { id: 'srv-tra-1', nombre: 'Trámites rápidos', duracionMin: 15 },
-      { id: 'srv-tra-2', nombre: 'Asesoría personalizada', duracionMin: 25 },
-    ],
-    atendedores: [],
+    catalog: catalog(
+      'Atención al Ciudadano Demo',
+      true,
+      [
+        service('svc-a-rapida', 'Trámites y orientación', 'Consultas de documentos y expedientes.', 15),
+        service('svc-a-mesa', 'Mesa de partes rápida', 'Recepción y sellado de documentos.', 10),
+      ],
+      [
+        staff('ase-001', 'Módulo 1 · Ana Torres', 'disponible', ['svc-a-rapida', 'svc-a-mesa']),
+        staff('ase-002', 'Módulo 2 · Juan Quispe', 'disponible', ['svc-a-rapida', 'svc-a-mesa']),
+      ]
+    ),
   },
 ];
 
-export function normalizeRubro(rubro?: string | null): BusinessRubro {
-  const value = (rubro ?? '').trim().toLowerCase();
+export const BARBER_DIRECTORY = BUSINESS_DIRECTORY;
+export const DEMO_BUSINESS_DIRECTORY = BUSINESS_DIRECTORY;
+
+export function normalizeBusinessCategory(raw?: string | null): BusinessCategory {
+  const value = (raw ?? '').trim().toLowerCase();
   if (
     value === 'barberia' ||
     value === 'salud' ||
@@ -154,38 +199,98 @@ export function normalizeRubro(rubro?: string | null): BusinessRubro {
   return 'general';
 }
 
-export function getBusinessCategoryLabel(rubro?: string | null): string {
-  return RUBRO_LABELS[normalizeRubro(rubro)];
+export const normalizeRubro = normalizeBusinessCategory;
+
+export function getBusinessCategoryLabel(category?: string | null): string {
+  return CATEGORY_LABELS[normalizeBusinessCategory(category)];
 }
 
-export function getStaffRoleLabel(rubro?: string | null, customLabel?: string | null): string {
+export function getStaffRoleLabel(category?: string | null, customLabel?: string | null): string {
   const trimmed = (customLabel ?? '').trim();
   if (trimmed.length > 0 && trimmed.toLowerCase() !== 'profesional') {
     return trimmed;
   }
-  return DEFAULT_STAFF_ROLE_LABELS[normalizeRubro(rubro)];
+  return DEFAULT_STAFF_LABELS[normalizeBusinessCategory(category)];
 }
 
-export function getSelectStaffTitle(rubro?: string | null, customLabel?: string | null): string {
-  const roleLabel = getStaffRoleLabel(rubro, customLabel).toLowerCase();
+export function getSelectStaffTitle(category?: string | null, customLabel?: string | null): string {
+  const roleLabel = getStaffRoleLabel(category, customLabel).toLowerCase();
   return `Elige tu ${roleLabel}`;
 }
 
-export function filterDemoBusinesses(
-  businesses: DirectoryBusiness[],
+export function categoryFilterToSlug(filter: CategoryFilter): BusinessCategory | null {
+  switch (filter) {
+    case 'Barberías':
+      return 'barberia';
+    case 'Salud':
+      return 'salud';
+    case 'Atención':
+      return 'atencion_cliente';
+    case 'Restaurantes':
+      return 'gastronomia';
+    case 'Comercio':
+      return 'retail';
+    case 'Todos':
+    default:
+      return null;
+  }
+}
+
+export function findDirectoryBusinessByCode(code?: string | null): BusinessDirectoryEntry | null {
+  const normalized = (code ?? '').trim().toUpperCase();
+  if (!normalized) return null;
+  return BUSINESS_DIRECTORY.find((entry) => entry.code.toUpperCase() === normalized) ?? null;
+}
+
+export function nearbyBarberias(
+  limit = 5,
+  source: BusinessDirectoryEntry[] = BUSINESS_DIRECTORY
+): BusinessDirectoryEntry[] {
+  return [...source].sort((a, b) => a.distanceKm - b.distanceKm).slice(0, limit);
+}
+
+export function barberiasByDistrict(
+  district: BarberDistrict,
+  source: BusinessDirectoryEntry[] = BUSINESS_DIRECTORY
+): BusinessDirectoryEntry[] {
+  if (district === 'Todos') return source;
+  return source.filter((entry) => entry.district === district);
+}
+
+export function businessesByCategory(
+  categoryFilter: CategoryFilter,
+  source: BusinessDirectoryEntry[] = BUSINESS_DIRECTORY
+): BusinessDirectoryEntry[] {
+  const slug = categoryFilterToSlug(categoryFilter);
+  if (!slug) return source;
+  return source.filter((entry) => entry.category === slug);
+}
+
+export function searchBusinesses(
   query: string,
-  category: BusinessCategoryFilter = 'all'
-): DirectoryBusiness[] {
-  const normalizedQuery = query.trim().toLowerCase();
-  return businesses.filter((item) => {
-    const matchesCategory = category === 'all' || item.rubro === category;
-    if (!matchesCategory) return false;
-    if (!normalizedQuery) return true;
-    return (
-      item.nombre.toLowerCase().includes(normalizedQuery) ||
-      item.codigo.toLowerCase().includes(normalizedQuery) ||
-      item.direccion.toLowerCase().includes(normalizedQuery) ||
-      getBusinessCategoryLabel(item.rubro).toLowerCase().includes(normalizedQuery)
-    );
-  });
+  categoryFilter: CategoryFilter = 'Todos',
+  source: BusinessDirectoryEntry[] = BUSINESS_DIRECTORY
+): BusinessDirectoryEntry[] {
+  const normalized = query.trim().toLowerCase();
+  const list = businessesByCategory(categoryFilter, source);
+  if (!normalized) return list;
+  return list.filter(
+    (item) =>
+      item.name.toLowerCase().includes(normalized) ||
+      item.code.toLowerCase().includes(normalized) ||
+      item.district.toLowerCase().includes(normalized) ||
+      item.categoryLabel.toLowerCase().includes(normalized)
+  );
+}
+
+export function barberAvailableCount(entry: BusinessDirectoryEntry): number {
+  return entry.catalog.barbers.filter((item) => item.operationalState === 'disponible').length;
+}
+
+export function barberServiceMinPrice(entry: BusinessDirectoryEntry): number | null {
+  const prices = entry.catalog.services
+    .map((item) => item.referencePriceCents)
+    .filter((value): value is number => value !== null);
+  if (prices.length === 0) return null;
+  return Math.min(...prices);
 }

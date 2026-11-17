@@ -6,6 +6,7 @@ import { BrandBar, Button, Card, Icon, OptionCard, Screen, StickyBar, StepTracke
 import { Palette, Radius, space, TypeScale } from '@/constants/theme';
 import { CustomerPage, CustomerState } from '@/components/customer/customer-ui';
 import { useGuestFlow } from '@/features/public/guest-flow-session';
+import { useBusinessRubro } from '@/features/public/use-business-rubro';
 import { formatReferencePrice } from '@/features/queue/commercial-booking';
 import type { CommercialService } from '@/features/queue/commercial-queue-api';
 
@@ -37,21 +38,32 @@ function ServiceOption({ selected, service, onPress }: { selected: boolean; serv
 
 export default function ServiceScreen() {
   const insets = useSafeAreaInsets();
-  const { draft, chooseService } = useGuestFlow();
+  const { draft, chooseService, chooseBarber } = useGuestFlow();
+  const rubroInfo = useBusinessRubro(draft?.companyCode);
 
   if (!draft) {
     return (
       <CustomerPage>
-        <CustomerState label="Primero identifica una barbería." action={() => router.replace('/')} />
+        <CustomerState label="Primero identifica una empresa." action={() => router.replace('/')} />
       </CustomerPage>
     );
   }
 
   const selectedService = draft.catalog.services.find((service) => service.serviceId === draft.serviceId) ?? null;
   const selectedPrice = selectedService ? formatReferencePrice(selectedService.referencePriceCents) : null;
-  const hasBarbers = draft.catalog.barbers.length > 0;
-  const steps = hasBarbers ? ['Servicio', 'Barbero', 'Confirmar'] : ['Servicio', 'Confirmar'];
-  const continueHref = hasBarbers ? '/(public)/barber' : '/(public)/details';
+  const hasStaffStep = draft.catalog.barbers.length > 0 && rubroInfo.requiresSpecificStaff;
+  const staffSingular = rubroInfo.staffLabel.toLowerCase();
+  const steps = hasStaffStep ? ['Servicio', rubroInfo.staffLabel, 'Confirmar'] : ['Servicio', 'Confirmar'];
+
+  const handleContinue = () => {
+    if (!selectedService) return;
+    if (!hasStaffStep) {
+      chooseBarber(null);
+      router.push('/(public)/details');
+      return;
+    }
+    router.push('/(public)/barber');
+  };
 
   return (
     <Screen scroll={false}>
@@ -60,13 +72,15 @@ export default function ServiceScreen() {
         showsVerticalScrollIndicator={false}
         style={{ backgroundColor: Palette.canvas, flex: 1 }}
       >
-        <BrandBar onBack={() => router.back()} step="1/3" />
+        <BrandBar onBack={() => router.back()} step={hasStaffStep ? '1/3' : '1/2'} />
 
         <View style={styles.intro}>
           <Text style={styles.shopName}>{draft.catalog.name}</Text>
           <Text style={[TypeScale.display, { color: Palette.ink, textAlign: 'center' }]}>Elige tu servicio</Text>
           <Text style={[TypeScale.body, styles.subtitle]}>
-            {hasBarbers ? 'Selecciona lo que necesitas antes de elegir tu barbero.' : 'Selecciona lo que necesitas para continuar.'}
+            {hasStaffStep
+              ? `Selecciona lo que necesitas antes de elegir tu ${staffSingular}.`
+              : 'Selecciona lo que necesitas para continuar.'}
           </Text>
           <StepTracker activeStep={0} steps={steps} />
         </View>
@@ -79,7 +93,7 @@ export default function ServiceScreen() {
             <Text style={[TypeScale.bodySmall, { color: Palette.inkMuted, textAlign: 'center' }]}>
               Consulta en el local para conocer cuándo volver a intentar.
             </Text>
-            <Button label="Volver a la barbería" onPress={() => router.back()} variant="secondary" />
+            <Button label="Volver al negocio" onPress={() => router.back()} variant="secondary" />
             <Button label="Ir al inicio" onPress={() => router.replace('/')} variant="link" />
           </Card>
         ) : (
@@ -115,13 +129,13 @@ export default function ServiceScreen() {
           </View>
         </View>
         <Button
-          accessibilityLabel={hasBarbers ? 'Continuar para elegir un barbero' : 'Continuar para confirmar'}
+          accessibilityLabel={hasStaffStep ? `Continuar para elegir un ${staffSingular}` : 'Continuar para confirmar'}
           accessibilityState={{ disabled: !selectedService }}
           disabled={!selectedService}
           fullWidth
           iconRight="arrow-right"
           label="Continuar"
-          onPress={() => router.push(continueHref)}
+          onPress={handleContinue}
           size="lg"
         />
       </StickyBar>
@@ -131,7 +145,8 @@ export default function ServiceScreen() {
 
 const styles = StyleSheet.create({
   page: { alignSelf: 'center', gap: space(4), maxWidth: 520, paddingHorizontal: space(5), paddingTop: space(2), width: '100%' },
-  intro: { alignItems: 'center', gap: space(2), paddingHorizontal: space(2), paddingTop: space(2) },  shopName: { color: Palette.brandDeep, textAlign: 'center' },
+  intro: { alignItems: 'center', gap: space(2), paddingHorizontal: space(2), paddingTop: space(2) },
+  shopName: { color: Palette.brandDeep, textAlign: 'center' },
   subtitle: { color: Palette.inkMuted, maxWidth: 350, textAlign: 'center' },
   serviceList: { gap: space(3) },
   summary: { alignItems: 'center', flexDirection: 'row', gap: space(3), minHeight: 46 },

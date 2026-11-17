@@ -8,6 +8,7 @@ import { Palette, Radius, space, TypeScale } from '@/constants/theme';
 import { compatibleBarbers } from '@/features/queue/commercial-booking';
 import type { CommercialBarber } from '@/features/queue/commercial-queue-api';
 import { useGuestFlow } from '@/features/public/guest-flow-session';
+import { useBusinessRubro } from '@/features/public/use-business-rubro';
 
 function BarberOption({ barber, selected, onPress }: { barber: CommercialBarber; selected: boolean; onPress(): void }) {
   const available = barber.operationalState === 'disponible';
@@ -31,6 +32,7 @@ function BarberOption({ barber, selected, onPress }: { barber: CommercialBarber;
 export default function BarberScreen() {
   const insets = useSafeAreaInsets();
   const { draft, chooseBarber } = useGuestFlow();
+  const rubroInfo = useBusinessRubro(draft?.companyCode);
 
   if (!draft?.serviceId) {
     return (
@@ -44,6 +46,7 @@ export default function BarberScreen() {
   const duration = selectedService ? `${Math.ceil(selectedService.estimatedDurationSeconds / 60)} min` : null;
   const barbers = compatibleBarbers(draft.catalog, draft.serviceId);
   const hasBarbers = barbers.length > 0;
+  const staffSingular = rubroInfo.staffLabel.toLowerCase();
 
   return (
     <Screen scroll={false}>
@@ -56,11 +59,13 @@ export default function BarberScreen() {
 
         <View style={styles.intro}>
           <Text style={styles.shopName}>{draft.catalog.name}</Text>
-          <Text style={[TypeScale.display, { color: Palette.ink, textAlign: 'center' }]}>Elige tu barbero</Text>
+          <Text style={[TypeScale.display, { color: Palette.ink, textAlign: 'center' }]}>
+            {rubroInfo.selectStaffTitle}
+          </Text>
           <Text style={[TypeScale.body, styles.subtitle]}>
             Puedes indicar una preferencia o dejar la elección flexible.
           </Text>
-          {hasBarbers ? <StepTracker activeStep={1} steps={['Servicio', 'Barbero', 'Confirmar']} /> : null}
+          {hasBarbers ? <StepTracker activeStep={1} steps={['Servicio', rubroInfo.staffLabel, 'Confirmar']} /> : null}
         </View>
 
         {selectedService ? (
@@ -81,14 +86,14 @@ export default function BarberScreen() {
         {hasBarbers ? (
           <View accessibilityRole="radiogroup" style={styles.options}>
             <OptionCard
-              accessibilityLabel="Elegir cualquier barbero compatible"
+              accessibilityLabel={`Elegir cualquier ${staffSingular} compatible`}
               badge="Elección flexible"
               badgeTone="gold"
-              detail="Damos preferencia al primer barbero compatible que esté disponible cuando llamen tu turno."
+              detail={`Damos preferencia al primer ${staffSingular} compatible que esté disponible cuando llamen tu turno.`}
               icon="sparkle"
               onPress={() => chooseBarber(null)}
               selected={draft.requestedBarberId === null}
-              title="Cualquier barbero compatible"
+              title={`Cualquier ${staffSingular} disponible`}
             />
 
             <View style={styles.listLabel}>
@@ -110,7 +115,7 @@ export default function BarberScreen() {
               <Icon color={Palette.brand} name="user" size={22} />
             </View>
             <Text style={[TypeScale.title, { color: Palette.ink, textAlign: 'center' }]}>
-              No hay barberos compatibles en turno.
+              No hay {staffSingular}s disponibles en este momento.
             </Text>
             <Text style={[TypeScale.bodySmall, { color: Palette.inkMuted, textAlign: 'center' }]}>
               Vuelve a elegir un servicio o consulta en el local.
@@ -126,7 +131,7 @@ export default function BarberScreen() {
           </View>
           <Text style={[TypeScale.bodyStrong, { color: Palette.ink }]}>Tu preferencia queda registrada</Text>
           <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>
-            Si eliges un barbero específico, tu turno espera a que pueda atenderte. La asignación ocurre cuando llamen tu turno.
+            Si eliges un {staffSingular} específico, tu turno espera a que pueda atenderte. La asignación ocurre cuando llamen tu turno.
           </Text>
         </Card>
       </ScrollView>
@@ -135,7 +140,7 @@ export default function BarberScreen() {
         <View style={styles.bottomHint}>
           <Icon color={Palette.inkMuted} name={draft.requestedBarberId === null ? 'sparkle' : 'user'} size={15} />
           <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>
-            {draft.requestedBarberId === null ? 'Elección flexible' : 'Barbero seleccionado'}
+            {draft.requestedBarberId === null ? 'Elección flexible' : `${rubroInfo.staffLabel} seleccionado`}
           </Text>
         </View>
         {hasBarbers ? (

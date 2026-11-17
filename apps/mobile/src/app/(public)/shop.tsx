@@ -7,6 +7,7 @@ import { BrandBar, Button, Card, Icon, Pill, StateBlock } from '@/components/ui'
 import { HowToGetThere } from '@/components/customer/how-to-get-there';
 import { Palette, Radius, space, TypeScale } from '@/constants/theme';
 import { useGuestFlow } from '@/features/public/guest-flow-session';
+import { useBusinessRubro } from '@/features/public/use-business-rubro';
 import { getCommercialCatalog } from '@/features/queue/commercial-queue-api';
 import { normalizeBusinessCode, translateQueueError } from '@/features/queue/queue-api';
 
@@ -16,6 +17,7 @@ export default function ShopScreen() {
   const { code: rawCode } = useLocalSearchParams<{ code?: string }>();
   const code = normalizeBusinessCode(rawCode ?? '');
   const { beginDiscovery, draft, hasActiveTicketAccess } = useGuestFlow();
+  const rubroInfo = useBusinessRubro(code || draft?.companyCode);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
@@ -28,7 +30,7 @@ export default function ShopScreen() {
     let active = true;
     async function discover() {
       if (!code) {
-        setError('Ingresa un código de barbería válido.');
+        setError('Ingresa un código de empresa válido.');
         setIsLoading(false);
         return;
       }
@@ -55,7 +57,8 @@ export default function ShopScreen() {
   const returnHome = useCallback(() => router.replace('/'), []);
   const catalog = draft?.companyCode === code ? draft.catalog : null;
   const canShowCatalog = catalog !== null && !isLoading && error === null;
-  const availableBarbers = catalog?.barbers.filter((barber) => barber.operationalState === 'disponible').length ?? 0;
+  const availableStaff = catalog?.barbers.filter((barber) => barber.operationalState === 'disponible').length ?? 0;
+  const staffSingular = rubroInfo.staffLabel.toLowerCase();
 
   if (hasActiveTicketAccess) return null;
 
@@ -68,8 +71,8 @@ export default function ShopScreen() {
         <BrandBar onBack={returnHome} />
 
         {isLoading ? (
-          <View accessibilityLabel="Consultando la barbería" accessibilityRole="progressbar">
-            <StateBlock detail="Verificamos el código que te mostraron." icon="search" loading title="Buscando la barbería…" />
+          <View accessibilityLabel="Consultando el negocio" accessibilityRole="progressbar">
+            <StateBlock detail="Verificamos el código que te mostraron." icon="search" loading title="Buscando el negocio…" />
           </View>
         ) : null}
 
@@ -80,7 +83,7 @@ export default function ShopScreen() {
               detail={error}
               icon="alert"
               onAction={retryDiscovery}
-              title="No pudimos identificarla"
+              title="No pudimos identificarlo"
             />
             <Button label="Volver al inicio" onPress={returnHome} variant="secondary" />
           </Card>
@@ -111,10 +114,15 @@ export default function ShopScreen() {
         {canShowCatalog && catalog && catalog.open ? (
           <>
             <View style={styles.intro}>
+              <Pill label={rubroInfo.categoryLabel} tone="neutral" />
               <Text style={[TypeScale.display, { color: Palette.ink, textAlign: 'center' }]}>{catalog.name}</Text>
               <Pill
                 icon="check-circle"
-                label={availableBarbers > 0 ? `${availableBarbers} barbero${availableBarbers === 1 ? '' : 's'} disponible${availableBarbers === 1 ? '' : 's'} ahora` : 'Recibe turnos ahora'}
+                label={
+                  availableStaff > 0
+                    ? `${availableStaff} ${staffSingular}${availableStaff === 1 ? '' : 's'} disponible${availableStaff === 1 ? '' : 's'} ahora`
+                    : 'Recibe turnos ahora'
+                }
                 tone="success"
               />
             </View>
@@ -141,7 +149,7 @@ export default function ShopScreen() {
             <HowToGetThere shop={catalog.shopLocation ?? null} shopName={catalog.name} />
 
             <Button
-              accessibilityLabel="Escanear otro código de barbería"
+              accessibilityLabel="Escanear otro código"
               label="Escanear otro código"
               onPress={() => router.replace('/(public)/scan')}
               variant="link"
@@ -157,9 +165,7 @@ const styles = StyleSheet.create({
   shell: { backgroundColor: Palette.canvas, flex: 1 },
   page: { alignSelf: 'center', gap: space(5), maxWidth: 520, paddingHorizontal: space(5), paddingTop: space(2), width: '100%' },
   stateCard: { marginTop: space(6) },
-
   intro: { alignItems: 'center', gap: space(2.5), paddingTop: space(2) },
-
   infoIcon: {
     alignItems: 'center',
     backgroundColor: Palette.surface,

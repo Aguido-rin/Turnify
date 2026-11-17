@@ -292,3 +292,9 @@ export function barberServiceMinPrice(entry: BusinessDirectoryEntry): number | n
   if (prices.length === 0) return null;
   return Math.min(...prices);
 }
+
+export function findDirectoryBusinessByCode(code?: string | null): BusinessDirectoryEntry | null {
+  const normalized = (code ?? '').trim().toUpperCase();
+  if (!normalized) return null;
+  return BUSINESS_DIRECTORY.find((entry) => entry.code.toUpperCase() === normalized) ?? null;
+}
