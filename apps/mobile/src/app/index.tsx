@@ -1,9 +1,12 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { BrandMark, Button, Card, Icon, Pill, TextField } from '@/components/ui';
+import { BrandMark, Button, Card, Icon, Pill, TextField, TutorialModal } from '@/components/ui';
+import { BusinessPickerModal } from '@/components/customer/business-picker-modal';
 import { Palette, Radius, space, TypeScale } from '@/constants/theme';
+import type { BarberDirectoryEntry } from '@/features/customer/barber-directory';
+import { hasSeenTutorial, markTutorialSeen } from '@/features/public/tutorial-storage';
 import { getGuestTicketState, type GuestTicketState } from '@/features/queue/public-guest-ticket-api';
 import { createGuestTicketHomeChannelName, subscribeToGuestTicketHomeChanges } from '@/features/queue/public-ticket-home-realtime';
 import { normalizeBusinessCode } from '@/features/queue/queue-api';
@@ -24,14 +27,28 @@ export default function PublicWelcomeScreen() {
   const [code, setCode] = useState('');
   const [lastCode, setLastCode] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { ticketAccess, hasActiveTicketAccess, settleGuestTicket } = useGuestFlow();
+  const { ticketAccess, hasActiveTicketAccess, settleGuestTicket, beginDiscovery } = useGuestFlow();
   const [activeTicket, setActiveTicket] = useState<GuestTicketState | null>(null);
   const [isTicketLoading, setIsTicketLoading] = useState(false);
   const [ticketError, setTicketError] = useState<string | null>(null);
   const requests = useRef(new GuestTicketRequests()).current;
   requests.setIdentity(ticketAccess);
   const calledRemaining = useRemainingTolerance(activeTicket?.calledDeadlineAt ?? null);
+
+  useEffect(() => {
+    let mounted = true;
+    void hasSeenTutorial().then((seen) => {
+      if (mounted && !seen && !hasActiveTicketAccess) {
+        setIsTutorialOpen(true);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [hasActiveTicketAccess]);
 
   const refreshActiveTicket = useCallback(async () => {
     if (!ticketAccess) return;

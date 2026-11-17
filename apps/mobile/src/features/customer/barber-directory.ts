@@ -1,11 +1,13 @@
 import type { CommercialBarber, CommercialCatalog, CommercialService } from '@/features/queue/commercial-queue-api';
 
 /**
- * Static barbería directory used by the customer home so the discovery
- * experience can be explored without changing any backend endpoint. Every
- * barbería carries a `CommercialCatalog` shaped payload, so selecting one can
- * seed the existing guest booking flow (service -> barber -> details).
+ * Lightweight business directory for virtual queue discovery.
+ * Stripped of redundant mock shops to keep the client ultra-lightweight.
+ * Retains 1 minimal barbería plus 2 additional sectors (Salud and Atención)
+ * to demonstrate multi-rubro virtual queue scalability without code bloating.
  */
+
+export type BusinessCategory = 'barberia' | 'salud' | 'atencion_cliente';
 
 export type BarberDirectoryEntry = {
   businessId: string;
@@ -15,6 +17,9 @@ export type BarberDirectoryEntry = {
   distanceKm: number;
   etaMinutes: number;
   isOpen: boolean;
+  category: BusinessCategory;
+  categoryLabel: string;
+  staffLabel: string;
   catalog: CommercialCatalog;
 };
 
@@ -25,16 +30,16 @@ const catalog = (name: string, isOpen: boolean, services: CommercialService[], b
   barbers,
 });
 
-const service = (id: string, name: string, description: string, minutes: number, price: number): CommercialService => ({
+const service = (id: string, name: string, description: string, minutes: number): CommercialService => ({
   serviceId: id,
   name,
   description,
   estimatedDurationSeconds: minutes * 60,
   measuredDurationSeconds: null,
-  referencePriceCents: price,
+  referencePriceCents: null,
 });
 
-const barber = (id: string, name: string, state: CommercialBarber['operationalState'], serviceIds: string[]): CommercialBarber => ({
+const staff = (id: string, name: string, state: CommercialBarber['operationalState'], serviceIds: string[]): CommercialBarber => ({
   barberId: id,
   name,
   operationalState: state,
@@ -42,104 +47,71 @@ const barber = (id: string, name: string, state: CommercialBarber['operationalSt
   serviceIds,
 });
 
-export const BARBER_DISTRICTS = ['Todos', 'Miraflores', 'San Isidro', 'Barranco', 'Surco'] as const;
+export const BARBER_DISTRICTS = ['Todos', 'Miraflores', 'San Isidro', 'Barranco'] as const;
 export type BarberDistrict = (typeof BARBER_DISTRICTS)[number];
 
+export const BUSINESS_CATEGORIES = ['Todos', 'Barberías', 'Salud', 'Atención'] as const;
+export type CategoryFilter = (typeof BUSINESS_CATEGORIES)[number];
+
 export const BARBER_DIRECTORY: BarberDirectoryEntry[] = [
+  // 1. Barbería Mínima de Referencia (Única barbería de demostración)
   {
-    businessId: 'dir-001',
-    code: 'TURNIFY-MIRAFLORES',
-    name: 'Turnify Miraflores',
+    businessId: 'dir-barberia-01',
+    code: 'BARBERIA-DEMO',
+    name: 'Barbería Estilo Demo',
     district: 'Miraflores',
-    distanceKm: 0.4,
-    etaMinutes: 3,
+    distanceKm: 0.5,
+    etaMinutes: 5,
     isOpen: true,
-    catalog: catalog('Turnify Miraflores', true, [
-      service('svc-cut', 'Corte clásico', 'Corte y peinado con lavado.', 30, 2000),
-      service('svc-cut-beard', 'Corte + barba', 'Corte con perfilado de barba.', 45, 3500),
-      service('svc-beard', 'Perfilado de barba', 'Perfilado y recorte de barba.', 20, 1800),
+    category: 'barberia',
+    categoryLabel: 'Barbería',
+    staffLabel: 'Barbero',
+    catalog: catalog('Barbería Estilo Demo', true, [
+      service('svc-b-cut', 'Corte clásico', 'Corte de cabello y peinado.', 30),
+      service('svc-b-beard', 'Corte + barba', 'Corte integral y perfilado.', 45),
     ], [
-      barber('barb-001', 'Carlos Méndez', 'disponible', ['svc-cut', 'svc-cut-beard']),
-      barber('barb-002', 'Luis Ramírez', 'ocupado', ['svc-cut', 'svc-beard']),
-      barber('barb-003', 'Diego Salas', 'disponible', ['svc-cut-beard', 'svc-beard']),
+      staff('barb-001', 'Carlos Méndez', 'disponible', ['svc-b-cut', 'svc-b-beard']),
+      staff('barb-002', 'Diego Salas', 'disponible', ['svc-b-cut', 'svc-b-beard']),
     ]),
   },
+  // 2. Rubro Adicional: Salud / Consultorio
   {
-    businessId: 'dir-002',
-    code: 'TURNIFY-SANISIDRO',
-    name: 'Turnify San Isidro',
+    businessId: 'dir-salud-01',
+    code: 'CLINICA-DEMO',
+    name: 'Centro Médico Sanitas Demo',
     district: 'San Isidro',
     distanceKm: 1.2,
-    etaMinutes: 6,
+    etaMinutes: 8,
     isOpen: true,
-    catalog: catalog('Turnify San Isidro', true, [
-      service('svc-cut', 'Corte clásico', 'Corte y peinado con lavado.', 30, 2200),
-      service('svc-fade', 'Corte degradado', 'Degradado con lineas definidas.', 40, 2800),
+    category: 'salud',
+    categoryLabel: 'Salud',
+    staffLabel: 'Médico',
+    catalog: catalog('Centro Médico Sanitas Demo', true, [
+      service('svc-s-med', 'Medicina general', 'Consulta médica y evaluación rápida.', 20),
+      service('svc-s-triage', 'Triaje y control', 'Toma de presión, signos vitales y vacunas.', 15),
     ], [
-      barber('barb-101', 'Andrés Rojas', 'disponible', ['svc-cut', 'svc-fade']),
-      barber('barb-102', 'Pedro Alvarado', 'disponible', ['svc-cut']),
+      staff('med-001', 'Dra. Valeria Gómez', 'disponible', ['svc-s-med', 'svc-s-triage']),
+      staff('med-002', 'Dr. Andrés Paz', 'disponible', ['svc-s-med']),
     ]),
   },
+  // 3. Rubro Adicional: Atención al Cliente / Trámites
   {
-    businessId: 'dir-003',
-    code: 'TURNIFY-BARRANCO',
-    name: 'Turnify Barranco',
+    businessId: 'dir-atencion-01',
+    code: 'TRAMITES-DEMO',
+    name: 'Atención al Ciudadano Demo',
     district: 'Barranco',
-    distanceKm: 2.0,
-    etaMinutes: 9,
+    distanceKm: 1.8,
+    etaMinutes: 4,
     isOpen: true,
-    catalog: catalog('Turnify Barranco', true, [
-      service('svc-cut-beard', 'Corte + barba', 'Corte con perfilado de barba.', 45, 3200),
-      service('svc-shave', 'Afeitado clásico', 'Afeitado clásico con toalla caliente.', 25, 1500),
+    category: 'atencion_cliente',
+    categoryLabel: 'Atención',
+    staffLabel: 'Asesor',
+    catalog: catalog('Atención al Ciudadano Demo', true, [
+      service('svc-a-rapida', 'Trámites y orientación', 'Consultas de documentos y expedientes.', 15),
+      service('svc-a-mesa', 'Mesa de partes rápida', 'Recepción y sellado de documentos.', 10),
     ], [
-      barber('barb-201', 'Mateo Vargas', 'disponible', ['svc-cut-beard', 'svc-shave']),
-    ]),
-  },
-  {
-    businessId: 'dir-004',
-    code: 'TURNIFY-SURCO',
-    name: 'Turnify Surco',
-    district: 'Surco',
-    distanceKm: 3.4,
-    etaMinutes: 12,
-    isOpen: false,
-    catalog: catalog('Turnify Surco', false, [
-      service('svc-cut', 'Corte clásico', 'Corte y peinado con lavado.', 30, 2500),
-      service('svc-kids', 'Corte infantil', 'Corte para niños hasta 10 años.', 25, 1800),
-    ], [
-      barber('barb-301', 'Jorge Palma', 'disponible', ['svc-cut', 'svc-kids']),
-    ]),
-  },
-  {
-    businessId: 'dir-005',
-    code: 'TURNIFY-MIRAFLORES-2',
-    name: 'Turnify Miraflores Centro',
-    district: 'Miraflores',
-    distanceKm: 1.7,
-    etaMinutes: 7,
-    isOpen: true,
-    catalog: catalog('Turnify Miraflores Centro', true, [
-      service('svc-cut', 'Corte clásico', 'Corte y peinado con lavado.', 30, 1900),
-      service('svc-beard', 'Perfilado de barba', 'Perfilado y recorte de barba.', 20, 1600),
-      service('svc-color', 'Color de cabello', 'Coloración y tratamiento.', 60, 5500),
-    ], [
-      barber('barb-401', 'Iván Castro', 'disponible', ['svc-cut', 'svc-color']),
-      barber('barb-402', 'Rosa Gutiérrez', 'ocupado', ['svc-beard', 'svc-color']),
-    ]),
-  },
-  {
-    businessId: 'dir-006',
-    code: 'TURNIFY-SANISIDRO-2',
-    name: 'Turnify San Isidro Norte',
-    district: 'San Isidro',
-    distanceKm: 2.6,
-    etaMinutes: 10,
-    isOpen: true,
-    catalog: catalog('Turnify San Isidro Norte', true, [
-      service('svc-cut', 'Corte clásico', 'Corte y peinado con lavado.', 30, 2100),
-      service('svc-cut-beard', 'Corte + barba', 'Corte con perfilado de barba.', 45, 3400),
-    ], [
-      barber('barb-501', 'Sergio Niles', 'disponible', ['svc-cut', 'svc-cut-beard']),
+      staff('ase-001', 'Módulo 1 · Ana Torres', 'disponible', ['svc-a-rapida', 'svc-a-mesa']),
+      staff('ase-002', 'Módulo 2 · Juan Quispe', 'disponible', ['svc-a-rapida', 'svc-a-mesa']),
     ]),
   },
 ];
@@ -151,6 +123,26 @@ export function nearbyBarberias(limit = 5): BarberDirectoryEntry[] {
 export function barberiasByDistrict(district: BarberDistrict): BarberDirectoryEntry[] {
   if (district === 'Todos') return BARBER_DIRECTORY;
   return BARBER_DIRECTORY.filter((entry) => entry.district === district);
+}
+
+export function businessesByCategory(categoryFilter: CategoryFilter): BarberDirectoryEntry[] {
+  if (categoryFilter === 'Todos') return BARBER_DIRECTORY;
+  if (categoryFilter === 'Barberías') return BARBER_DIRECTORY.filter((e) => e.category === 'barberia');
+  if (categoryFilter === 'Salud') return BARBER_DIRECTORY.filter((e) => e.category === 'salud');
+  if (categoryFilter === 'Atención') return BARBER_DIRECTORY.filter((e) => e.category === 'atencion_cliente');
+  return BARBER_DIRECTORY;
+}
+
+export function searchBusinesses(query: string, categoryFilter: CategoryFilter = 'Todos'): BarberDirectoryEntry[] {
+  const normalized = query.trim().toLowerCase();
+  const list = businessesByCategory(categoryFilter);
+  if (!normalized) return list;
+  return list.filter((item) =>
+    item.name.toLowerCase().includes(normalized) ||
+    item.code.toLowerCase().includes(normalized) ||
+    item.district.toLowerCase().includes(normalized) ||
+    item.categoryLabel.toLowerCase().includes(normalized)
+  );
 }
 
 export function barberAvailableCount(entry: BarberDirectoryEntry): number {

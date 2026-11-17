@@ -13,3 +13,4 @@ export { BrandBar, ScreenHeader, type ScreenHeaderProps } from './screen-header'
 export { Sheet, useConfirm, type SheetProps } from './sheet';
 export { StateBlock, type StateBlockProps } from './state-block';
 export { TextField, type TextFieldProps } from './text-field';
+export { TutorialModal, type TutorialModalProps, type TutorialStep, TUTORIAL_STEPS } from './tutorial-modal';

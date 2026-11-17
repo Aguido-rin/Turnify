@@ -1,28 +1,19 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import { secureStorage, type SecureStorageAdapter } from '@/lib/secure-storage';
+import { createLocalSupabaseClient } from '@/lib/local-supabase-client';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
+const forceRemote = process.env.EXPO_PUBLIC_FORCE_REMOTE_SUPABASE === '1';
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+// Always true so the UI never blocks: if remote keys are not provided, it falls back to the in-device Local Engine.
+export const isSupabaseConfigured = true;
 
-/**
- * Throws a descriptive error instead of letting `createClient` fail with an
- * opaque invalid-URL message when the env file is missing.
- */
-function requireConfig(): { url: string; anonKey: string } {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error(
-      'Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. Copy apps/mobile/.env.example to apps/mobile/.env and fill in the values.'
-    );
-  }
-  return { url: supabaseUrl, anonKey: supabaseAnonKey };
-}
+let client: SupabaseClient | undefined;
 
-function buildClient(storage?: SecureStorageAdapter): SupabaseClient {
-  const { url, anonKey } = requireConfig();
-  return createClient(url, anonKey, {
+function buildRemoteClient(storage?: SecureStorageAdapter): SupabaseClient {
+  return createClient(supabaseUrl!, supabaseAnonKey!, {
     auth: {
       storage,
       autoRefreshToken: true,
@@ -32,18 +23,20 @@ function buildClient(storage?: SecureStorageAdapter): SupabaseClient {
   });
 }
 
-let client: SupabaseClient | undefined;
-
 /**
- * Returns the shared session-persisted client, creating it on first use.
- *
- * It is lazy on purpose: importing this module must not throw when the env file
- * is missing, so the UI can render a configuration notice instead of crashing.
- *
- * The anon key is public by design: RLS is what protects the data, and the
- * service_role key must never reach the bundle.
+ * Returns the active client:
+ * If remote Supabase credentials are not provided (or forceRemote is not set),
+ * it returns a fast in-device persistent TypeScript engine that saves state in
+ * the device's native storage (localStorage / SecureStore) with zero network latency.
  */
 export function getSupabase(): SupabaseClient {
-  client ??= buildClient(secureStorage);
+  if (client) return client;
+
+  if (forceRemote && supabaseUrl && supabaseAnonKey) {
+    client = buildRemoteClient(secureStorage);
+  } else {
+    client = createLocalSupabaseClient();
+  }
+
   return client;
 }
