@@ -4,14 +4,7 @@ import { BUSINESS_DIRECTORY } from '../features/customer/business-directory';
 
 export function createLocalSupabaseClient(): SupabaseClient {
   const authListeners = new Set<(event: string, session: unknown) => void>();
-  let currentSession: unknown = {
-    user: {
-      id: 'user-barber-you',
-      email: 'barbero@turnify.com',
-      user_metadata: { name: 'Tú' },
-    },
-    access_token: 'local-demo-token',
-  };
+  let currentSession: unknown = null;
 
   const client = {
     // --- RPC ---

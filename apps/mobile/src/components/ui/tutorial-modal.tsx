@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Icon } from './icon';
+import { Icon, type IconName } from './icon';
 
 export interface TutorialStep {
   stepNumber: number;
   title: string;
   description: string;
   tip: string;
-  iconName: string;
+  iconName: IconName;
 }
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
@@ -17,7 +17,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     description:
       'Toca "Seleccionar empresa" para buscar el lugar en la lista, o apunta tu cámara al código QR que está en el local.',
     tip: 'No necesitas saber códigos de memoria.',
-    iconName: 'storefront-outline',
+    iconName: 'storefront',
   },
   {
     stepNumber: 2,
@@ -25,7 +25,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     description:
       'Elige qué atención necesitas y escribe solo tu nombre. Sin contraseñas ni formularios largos.',
     tip: 'Toma menos de 20 segundos.',
-    iconName: 'ticket-outline',
+    iconName: 'ticket',
   },
   {
     stepNumber: 3,
@@ -33,7 +33,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     description:
       'Puedes sentarte, caminar o tomar un café. En tu pantalla verás cuántas personas faltan y el tiempo aproximado.',
     tip: 'Tu lugar en la fila está asegurado.',
-    iconName: 'time-outline',
+    iconName: 'clock',
   },
   {
     stepNumber: 4,
@@ -41,7 +41,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     description:
       'Cuando sea tu momento, tu celular sonará y cambiará de color para que te acerques con tranquilidad.',
     tip: 'Siempre tendrás unos minutos de tolerancia para llegar.',
-    iconName: 'notifications-outline',
+    iconName: 'bell',
   },
 ];
 

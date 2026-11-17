@@ -2,26 +2,34 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { BrandMark, Button, Card, Icon, Pill, TextField, TutorialModal } from '@/components/ui';
 import { BusinessPickerModal } from '@/components/customer/business-picker-modal';
+import { BrandMark, Button, Card, Icon, Pill, TextField, TutorialModal } from '@/components/ui';
 import { Palette, Radius, space, TypeScale } from '@/constants/theme';
 import type { BarberDirectoryEntry } from '@/features/customer/barber-directory';
-import { hasSeenTutorial, markTutorialSeen } from '@/features/public/tutorial-storage';
-import { getGuestTicketState, type GuestTicketState } from '@/features/queue/public-guest-ticket-api';
-import { createGuestTicketHomeChannelName, subscribeToGuestTicketHomeChanges } from '@/features/queue/public-ticket-home-realtime';
-import { normalizeBusinessCode } from '@/features/queue/queue-api';
-import { canCancelTicket } from '@/features/queue/ticket-presentation';
 import { useGuestFlow } from '@/features/public/guest-flow-session';
-import { GuestTicketRequests } from '@/features/public/guest-ticket-requests';
 import { guestRatingState } from '@/features/public/guest-rating';
 import { queueMetrics } from '@/features/public/guest-ticket-display';
-import { activeGuestTicketRoute, isActiveGuestTicketStatus, publicShopRoute, workerSignInRoute } from '@/features/public/public-route-policy';
+import { GuestTicketRequests } from '@/features/public/guest-ticket-requests';
+import {
+  activeGuestTicketRoute,
+  isActiveGuestTicketStatus,
+  publicShopRoute,
+  workerSignInRoute,
+} from '@/features/public/public-route-policy';
+import { hasSeenTutorial, markTutorialSeen } from '@/features/public/tutorial-storage';
+import { getGuestTicketState, type GuestTicketState } from '@/features/queue/public-guest-ticket-api';
+import {
+  createGuestTicketHomeChannelName,
+  subscribeToGuestTicketHomeChanges,
+} from '@/features/queue/public-ticket-home-realtime';
+import { normalizeBusinessCode } from '@/features/queue/queue-api';
+import { canCancelTicket } from '@/features/queue/ticket-presentation';
 import { useRemainingTolerance } from '@/features/worker/use-remaining-tolerance';
 import { getSupabase } from '@/lib/supabase';
 
 /**
  * Public launch route. Guest entry never depends on an authenticated session:
- * QR scan or business code for any customer.
+ * business directory picker, QR scan, or business code for any customer.
  */
 export default function PublicWelcomeScreen() {
   const [code, setCode] = useState('');
@@ -54,20 +62,29 @@ export default function PublicWelcomeScreen() {
     if (!ticketAccess) return;
     setIsTicketLoading(true);
     setTicketError(null);
-    await requests.refresh(ticketAccess, getGuestTicketState, (ticket) => {
-      if (isActiveGuestTicketStatus(ticket.status) || (ticket.status === 'finalizado' && guestRatingState(ticket) === 'pending')) {
-        setActiveTicket(ticket);
-        settleGuestTicket(ticketAccess, ticket);
-      } else {
-        setActiveTicket(null);
-        requests.setIdentity(null);
-        settleGuestTicket(ticketAccess, ticket);
-      }
-    }, () => {
-      setTicketError('No pudimos recuperar tu turno. Revisa tu conexión.');
-    }, () => {
-      setIsTicketLoading(false);
-    });
+    await requests.refresh(
+      ticketAccess,
+      getGuestTicketState,
+      (ticket) => {
+        if (
+          isActiveGuestTicketStatus(ticket.status) ||
+          (ticket.status === 'finalizado' && guestRatingState(ticket) === 'pending')
+        ) {
+          setActiveTicket(ticket);
+          settleGuestTicket(ticketAccess, ticket);
+        } else {
+          setActiveTicket(null);
+          requests.setIdentity(null);
+          settleGuestTicket(ticketAccess, ticket);
+        }
+      },
+      () => {
+        setTicketError('No pudimos recuperar tu turno. Revisa tu conexión.');
+      },
+      () => {
+        setIsTicketLoading(false);
+      },
+    );
   }, [requests, settleGuestTicket, ticketAccess]);
 
   useEffect(() => {
@@ -111,12 +128,27 @@ export default function PublicWelcomeScreen() {
   function continueWithCode(raw?: string) {
     const normalized = normalizeBusinessCode(raw ?? code);
     if (!normalized) {
-      setError('Ingresa el código válido que muestra la barbería.');
+      setError('Ingresa un código válido que muestre el negocio.');
       return;
     }
     setError(null);
     setLastCode(normalized);
     router.push({ params: { code: normalized }, pathname: publicShopRoute });
+  }
+
+  function handleSelectBusiness(business: BarberDirectoryEntry) {
+    setIsPickerOpen(false);
+    setError(null);
+    setLastCode(business.code);
+    if (business.catalog.services.length > 0) {
+      beginDiscovery(business.code, business.catalog);
+    }
+    router.push({ params: { code: business.code }, pathname: publicShopRoute });
+  }
+
+  function handleCloseTutorial() {
+    setIsTutorialOpen(false);
+    void markTutorialSeen();
   }
 
   function toggleCodeDrawer() {
@@ -125,20 +157,23 @@ export default function PublicWelcomeScreen() {
   }
 
   if (hasActiveTicketAccess) {
-    const barberName = activeTicket?.assignedBarberName ?? activeTicket?.requestedBarberName;
-    const statusPill = activeTicket?.status === 'finalizado'
-      ? { label: 'FINALIZADO · PENDIENTE DE PUNTUAR', tone: 'success' as const }
-      : activeTicket?.status === 'llamado'
-      ? { label: 'LLAMADO · TE TOCA', tone: 'gold' as const }
-      : activeTicket?.status === 'notificado'
-        ? { label: 'NOTIFICADO', tone: 'brand' as const }
-        : activeTicket?.status === 'en_atencion'
-          ? { label: 'EN ATENCIÓN', tone: 'success' as const }
-          : { label: 'EN ESPERA', tone: 'neutral' as const };
+    const staffName = activeTicket?.assignedBarberName ?? activeTicket?.requestedBarberName;
+    const statusPill =
+      activeTicket?.status === 'finalizado'
+        ? { label: 'FINALIZADO · PENDIENTE DE PUNTUAR', tone: 'success' as const }
+        : activeTicket?.status === 'llamado'
+          ? { label: 'LLAMADO · TE TOCA', tone: 'gold' as const }
+          : activeTicket?.status === 'notificado'
+            ? { label: 'NOTIFICADO', tone: 'brand' as const }
+            : activeTicket?.status === 'en_atencion'
+              ? { label: 'EN ATENCIÓN', tone: 'success' as const }
+              : { label: 'EN ESPERA', tone: 'neutral' as const };
     return (
       <View style={styles.centered}>
         <BrandMark size={44} />
-        <Text style={[TypeScale.eyebrow, styles.eyebrow]}>{activeTicket?.status === 'finalizado' ? 'TU TURNO TERMINÓ' : 'TU TURNO SIGUE ACTIVO'}</Text>
+        <Text style={[TypeScale.eyebrow, styles.eyebrow]}>
+          {activeTicket?.status === 'finalizado' ? 'TU TURNO TERMINÓ' : 'TU TURNO SIGUE ACTIVO'}
+        </Text>
         {isTicketLoading && !activeTicket ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator color={Palette.brand} />
@@ -157,11 +192,13 @@ export default function PublicWelcomeScreen() {
             <Pill label={statusPill.label} tone={statusPill.tone} />
             <Card tone={activeTicket.status === 'llamado' ? 'gold' : 'brand'} padding="lg" style={styles.activeMetrics}>
               <Text style={[TypeScale.body, { color: Palette.inkMuted }]}>
-                {activeTicket.status === 'finalizado' ? 'Todavía podés puntuar tu atención desde este dispositivo.' : activeTicket.status === 'llamado'
-                  ? 'Te están llamando ahora: acércate al personal'
-                  : activeTicket.status === 'en_atencion'
-                    ? 'Permanece en tu lugar hasta que termine.'
-                    : 'Tu lugar en la fila está reservado'}
+                {activeTicket.status === 'finalizado'
+                  ? 'Todavía podés puntuar tu atención desde este dispositivo.'
+                  : activeTicket.status === 'llamado'
+                    ? 'Te están llamando ahora: acércate al personal'
+                    : activeTicket.status === 'en_atencion'
+                      ? 'Permanece en tu lugar hasta que termine.'
+                      : 'Tu lugar en la fila está reservado'}
               </Text>
               {activeTicket.status === 'finalizado' ? null : activeTicket.status === 'llamado' ? (
                 <Text style={[TypeScale.title, { color: Palette.brandDeep }]}>
@@ -169,16 +206,16 @@ export default function PublicWelcomeScreen() {
                 </Text>
               ) : activeTicket.status === 'en_atencion' ? (
                 <Text style={[TypeScale.title, { color: Palette.brandDeep }]}>
-                  {barberName ? `Te atiende ${barberName}` : 'En atención ahora'}
+                  {staffName ? `Te atiende ${staffName}` : 'En atención ahora'}
                 </Text>
               ) : (
                 <Text style={[TypeScale.title, { color: Palette.brandDeep }]}>
                   {queueMetrics(activeTicket).ahead} delante · {queueMetrics(activeTicket).wait}
                 </Text>
               )}
-              {activeTicket.serviceName || barberName ? (
+              {activeTicket.serviceName || staffName ? (
                 <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>
-                  {[activeTicket.serviceName, barberName].filter(Boolean).join(' · ')}
+                  {[activeTicket.serviceName, staffName].filter(Boolean).join(' · ')}
                 </Text>
               ) : null}
             </Card>
@@ -199,7 +236,9 @@ export default function PublicWelcomeScreen() {
           </>
         ) : null}
         <Text style={[TypeScale.caption, styles.mutedCenter]}>
-          {activeTicket?.status === 'finalizado' ? 'Podés volver a puntuar antes de que venza el plazo de 24 horas.' : 'Te avisamos aquí mismo al llamarte. Cuando el barbero finalice, podrás puntuar tu atención.'}
+          {activeTicket?.status === 'finalizado'
+            ? 'Podés volver a puntuar antes de que venza el plazo de 24 horas.'
+            : 'Te avisamos aquí mismo al llamarte. Cuando finalicen tu atención, podrás puntuarla.'}
         </Text>
       </View>
     );
@@ -215,17 +254,25 @@ export default function PublicWelcomeScreen() {
       <View style={styles.narrative}>
         <Text style={[TypeScale.display, styles.narrativeTitle]}>Tu turno, sin esperar de más</Text>
         <Text style={[TypeScale.body, styles.narrativeDetail]}>
-          Sin cuenta, sin espera en puerta. Entrás y seguís tu lugar en vivo.
+          Sin cuenta, sin espera en puerta. Elige tu negocio y sigue tu lugar en vivo.
         </Text>
       </View>
 
       <View style={styles.actions}>
         <Button
           fullWidth
+          icon="storefront"
+          label="Seleccionar empresa"
+          onPress={() => setIsPickerOpen(true)}
+          size="lg"
+        />
+        <Button
+          fullWidth
           icon="qr"
           label="Escanear código QR"
           onPress={() => router.push('/(public)/scan')}
-          size="lg"
+          size="md"
+          variant="secondary"
         />
         <Button
           fullWidth
@@ -233,7 +280,7 @@ export default function PublicWelcomeScreen() {
           label="Ingresar código"
           onPress={toggleCodeDrawer}
           size="md"
-          variant="secondary"
+          variant="soft"
         />
         {lastCode && !isDrawerOpen ? (
           <Button
@@ -245,46 +292,73 @@ export default function PublicWelcomeScreen() {
         ) : null}
         {isDrawerOpen ? (
           <View style={styles.drawer}>
-            <Text style={[TypeScale.h3, styles.drawerTitle]}>Busca tu barbería</Text>
-            <Text style={[TypeScale.body, styles.drawerHelper]}>Escribe el código del mostrador. Si no lo encuentra, revisa mayúsculas y guiones.</Text>
+            <Text style={[TypeScale.h3, styles.drawerTitle]}>Busca tu negocio</Text>
+            <Text style={[TypeScale.body, styles.drawerHelper]}>
+              Escribe el código que muestra el local. Si no lo encuentra, revisa mayúsculas y guiones.
+            </Text>
             <TextField
               autoCapitalize="characters"
               autoCorrect={false}
               error={error}
-              label="CÓDIGO DE LA BARBERÍA"
+              label="CÓDIGO DE LA EMPRESA / NEGOCIO"
               onChangeText={setCode}
               onSubmitEditing={() => void continueWithCode()}
-              placeholder="Ej.: TURNO-123"
+              placeholder="Ej.: CLINICA-DEMO"
               returnKeyType="go"
               value={code}
             />
-            <Button fullWidth iconRight="arrow-right" label="Ver barbería" onPress={() => void continueWithCode()} />
+            <Button fullWidth iconRight="arrow-right" label="Continuar" onPress={() => void continueWithCode()} />
           </View>
         ) : null}
       </View>
 
-      <Card padding="lg" style={styles.stepsCard}>
-        <Text style={[TypeScale.headline, { color: Palette.ink }]}>¿Cómo funciona?</Text>
-        <View style={styles.step}>
-          <Icon color={Palette.brand} name="ticket" size={20} />
-          <View style={styles.stepCopy}>
-            <Text style={[TypeScale.label, { color: Palette.ink }]}>1 · Elige tu servicio</Text>
-            <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>Corte, barba o lo que necesites.</Text>
+      <Pressable
+        accessibilityLabel="Ver tutorial paso a paso"
+        accessibilityRole="button"
+        onPress={() => setIsTutorialOpen(true)}
+      >
+        <Card padding="lg" style={styles.stepsCard}>
+          <View style={styles.tutorialHeader}>
+            <View style={styles.stepCopy}>
+              <Text style={[TypeScale.headline, { color: Palette.ink }]}>¿Primera vez aquí?</Text>
+              <Text style={[TypeScale.caption, { color: Palette.brandDeep }]}>
+                Ver cómo funciona paso a paso
+              </Text>
+            </View>
+            <Icon color={Palette.brand} name="arrow-right" size={20} />
           </View>
-        </View>
-        <View style={styles.step}>
-          <Icon color={Palette.brand} name="bell" size={20} />
-          <View style={styles.stepCopy}>
-            <Text style={[TypeScale.label, { color: Palette.ink }]}>2 · Sigue tu turno</Text>
-            <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>Posición en vivo · deja la app abierta al llamarte.</Text>
+          <View style={styles.step}>
+            <Icon color={Palette.brand} name="ticket" size={20} />
+            <View style={styles.stepCopy}>
+              <Text style={[TypeScale.label, { color: Palette.ink }]}>1 · Pide tu turno sin registros</Text>
+              <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>
+                Elige empresa, servicio y entra a la fila al instante.
+              </Text>
+            </View>
           </View>
-        </View>
-      </Card>
+          <View style={styles.step}>
+            <Icon color={Palette.brand} name="bell" size={20} />
+            <View style={styles.stepCopy}>
+              <Text style={[TypeScale.label, { color: Palette.ink }]}>2 · Espera donde prefieras</Text>
+              <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>
+                Mira cuántas personas faltan y recibe aviso cuando te toque.
+              </Text>
+            </View>
+          </View>
+        </Card>
+      </Pressable>
 
       <View style={styles.workerFooter}>
         <Button href={workerSignInRoute} label="Soy trabajador" variant="link" />
       </View>
 
+      <TutorialModal onClose={handleCloseTutorial} visible={isTutorialOpen} />
+
+      <BusinessPickerModal
+        onClose={() => setIsPickerOpen(false)}
+        onSelectBusiness={handleSelectBusiness}
+        visible={isPickerOpen}
+      />
     </ScrollView>
   );
 }
@@ -318,10 +392,18 @@ const styles = StyleSheet.create({
   narrativeDetail: { color: Palette.inkMuted, textAlign: 'center' },
   loadingRow: { alignItems: 'center', flexDirection: 'row', gap: space(2) },
   actions: { gap: space(2) },
-  drawer: { backgroundColor: Palette.surface, borderColor: Palette.border, borderRadius: Radius.large, borderWidth: 1, gap: space(2), padding: space(4) },
+  drawer: {
+    backgroundColor: Palette.surface,
+    borderColor: Palette.border,
+    borderRadius: Radius.large,
+    borderWidth: 1,
+    gap: space(2),
+    padding: space(4),
+  },
   drawerTitle: { color: Palette.ink },
   drawerHelper: { color: Palette.inkMuted },
   stepsCard: { gap: space(3) },
+  tutorialHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   step: { alignItems: 'center', flexDirection: 'row', gap: space(3) },
   stepCopy: { flex: 1, gap: 2 },
   workerFooter: { alignItems: 'center', gap: space(1), paddingBottom: space(2) },

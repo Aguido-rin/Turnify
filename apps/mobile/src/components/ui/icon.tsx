@@ -124,7 +124,7 @@ export type IconProps = {
 };
 
 export function Icon({ name, size = 22, color = Palette.ink, strokeWidth = 1.8 }: IconProps) {
-  const shape = shapes[name];
+  const shape = shapes[name] ?? shapes.info;;
 
   /**
    * `accessibilityElementsHidden` and `importantForAccessibility` are iOS-only
