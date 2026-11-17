@@ -45,7 +45,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
 ];
 
-interface TutorialModalProps {
+export interface TutorialModalProps {
   visible: boolean;
   onClose: () => void;
 }

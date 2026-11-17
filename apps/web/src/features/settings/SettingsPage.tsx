@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type SyntheticEvent } from 'react';
 import QRCode from 'qrcode';
 
 import { Badge, Button, ConfirmModal, Modal, PageHeader, SectionCard, SelectField, StatsRow, SwitchField } from '@/components/common';
@@ -9,7 +9,7 @@ import {
   type WebBusinessRubro,
 } from '@/data/labels';
 import { fetchShopSettings, saveShopSettings, type ShopSettings } from '@/data/live';
-import { isSupabaseConfigured, supabase } from '@/data/supabase';
+import { isSupabaseConfigured, getSupabase } from '@/data/supabase';
 import { useShop } from '@/state/ShopContext';
 import { ShopLocationPicker } from './ShopLocationPicker';
 import type { ShopPoint } from './shop-location';
@@ -103,8 +103,8 @@ export function SettingsPage() {
         setIdentity({ name: settings.name, code: settings.code, timezone: settings.timezone });
         setShopName(settings.name);
 
-        if (supabase && settings.code) {
-          const { data: emp } = await supabase
+        if (getSupabase() && settings.code) {
+          const { data: emp } = await getSupabase()
             .from('empresas')
             .select('rubro, etiqueta_atendedor')
             .eq('codigo', settings.code)
@@ -180,7 +180,7 @@ export function SettingsPage() {
     }
   }
 
-  async function save(event?: FormEvent) {
+  async function save(event?: SyntheticEvent) {
     event?.preventDefault();
 
     if (!isSupabaseConfigured()) {
@@ -202,8 +202,8 @@ export function SettingsPage() {
     try {
       await saveShopSettings({ ...config, shopName: shopName.trim() });
 
-      if (supabase && identity?.code) {
-        const { error: rubroError } = await supabase
+      if (getSupabase() && identity?.code) {
+        const { error: rubroError } = await getSupabase()
           .from('empresas')
           .update({
             rubro,
@@ -260,8 +260,8 @@ export function SettingsPage() {
         setShopName(settings.name);
         setIdentity({ name: settings.name, code: settings.code, timezone: settings.timezone });
 
-        if (supabase && settings.code) {
-          const { data: emp } = await supabase
+        if (getSupabase() && settings.code) {
+          const { data: emp } = await getSupabase()
             .from('empresas')
             .select('rubro, etiqueta_atendedor')
             .eq('codigo', settings.code)

@@ -1,4 +1,4 @@
-import { supabase } from '../../lib/supabase';
+import { getSupabase } from '../../lib/supabase';
 import {
   BUSINESS_DIRECTORY,
   BusinessDirectoryEntry,
@@ -31,6 +31,11 @@ export async function listPublicBusinesses(params?: {
   const category = params?.category ?? 'Todos';
 
   if (process.env.EXPO_PUBLIC_SKIP_AUTH === '1') {
+    return searchBusinesses(query, category, BUSINESS_DIRECTORY);
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) {
     return searchBusinesses(query, category, BUSINESS_DIRECTORY);
   }
 
@@ -89,6 +94,9 @@ export async function fetchBusinessRubroContext(code: string): Promise<{
       staffLabel: demoMatch.staffLabel,
     };
   }
+
+  const supabase = getSupabase();
+  if (!supabase) return null;
 
   try {
     const { data, error } = await supabase.rpc('obtener_perfil_publico_empresa', {
