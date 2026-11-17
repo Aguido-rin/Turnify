@@ -1,190 +1,174 @@
-import { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-
-import { Button, Card, Icon, Pill, TextField } from '@/components/ui';
-import { Palette, Radius, space, TypeScale } from '@/constants/theme';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { listPublicBusinesses } from '../../features/business/business-directory-api';
 import {
   BUSINESS_CATEGORIES,
-  searchBusinesses,
-  type BarberDirectoryEntry,
-  type CategoryFilter,
-} from '@/features/customer/barber-directory';
+  BusinessDirectoryEntry,
+  CategoryFilter,
+} from '../../features/customer/business-directory';
 
-export type BusinessPickerModalProps = {
+interface BusinessPickerModalProps {
   visible: boolean;
   onClose: () => void;
-  onSelectBusiness: (business: BarberDirectoryEntry) => void;
-};
+  onSelectBusiness: (business: BusinessDirectoryEntry) => void;
+}
 
 export function BusinessPickerModal({
   visible,
   onClose,
   onSelectBusiness,
 }: BusinessPickerModalProps) {
-  const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('Todos');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [businesses, setBusinesses] = useState<BusinessDirectoryEntry[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const filteredBusinesses = useMemo(() => {
-    return searchBusinesses(query, selectedCategory);
-  }, [query, selectedCategory]);
-
-  function handleSelect(business: BarberDirectoryEntry) {
-    onClose();
-    onSelectBusiness(business);
-  }
+  useEffect(() => {
+    if (!visible) return;
+    let active = true;
+    setLoading(true);
+    listPublicBusinesses({ query: searchQuery, category: selectedCategory })
+      .then((results) => {
+        if (active) setBusinesses(results);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [visible, searchQuery, selectedCategory]);
 
   return (
     <Modal
-      animationType="slide"
-      hardwareAccelerated
-      onRequestClose={onClose}
       visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
     >
       <View style={styles.container}>
-        {/* Top bar */}
-        <View style={styles.topBar}>
-          <View style={styles.titleWrap}>
-            <Text style={[TypeScale.eyebrow, { color: Palette.brandDeep }]}>Turnify · Negocios</Text>
-            <Text style={[TypeScale.title, { color: Palette.ink }]}>Elige dónde hacer cola</Text>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerTitle}>Seleccionar empresa</Text>
+            <Text style={styles.headerSubtitle}>
+              Elige el lugar donde deseas sacar tu turno
+            </Text>
           </View>
           <Pressable
-            accessibilityLabel="Cerrar selector"
-            accessibilityRole="button"
-            hitSlop={12}
             onPress={onClose}
             style={styles.closeButton}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar selector de empresa"
           >
-            <Icon color={Palette.ink} name="close" size={24} />
+            <Text style={styles.closeButtonText}>Cerrar</Text>
           </Pressable>
         </View>
 
-        {/* Search input */}
-        <View style={styles.searchWrap}>
-          <TextField
+        <View style={styles.searchBox}>
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Buscar por nombre, código o zona..."
+            placeholderTextColor="#64748B"
+            style={styles.searchInput}
             autoCapitalize="none"
             autoCorrect={false}
-            label="BUSCAR EMPRESA O CÓDIGO"
-            onChangeText={setQuery}
-            placeholder="Ej.: Barbería, Clínica, Trámites..."
-            returnKeyType="search"
-            value={query}
           />
+          {searchQuery.length > 0 && (
+            <Pressable
+              onPress={() => setSearchQuery('')}
+              style={styles.clearBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Limpiar búsqueda"
+            >
+              <Text style={styles.clearText}>Borrar</Text>
+            </Pressable>
+          )}
         </View>
 
-        {/* Category chips */}
-        <View style={styles.categoriesRow}>
-          {BUSINESS_CATEGORIES.map((category) => {
-            const isSelected = selectedCategory === category;
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
+          style={styles.chipsContainer}
+        >
+          {BUSINESS_CATEGORIES.map((cat) => {
+            const active = selectedCategory === cat;
             return (
               <Pressable
-                accessibilityLabel={`Filtrar por ${category}`}
+                key={cat}
+                onPress={() => setSelectedCategory(cat)}
+                style={[styles.chip, active && styles.chipActive]}
                 accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-                key={category}
-                onPress={() => setSelectedCategory(category)}
-                style={[
-                  styles.categoryChip,
-                  isSelected ? styles.categoryChipSelected : null,
-                ]}
+                accessibilityState={{ selected: active }}
               >
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    isSelected ? styles.categoryChipTextSelected : null,
-                  ]}
-                >
-                  {category}
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                  {cat}
                 </Text>
               </Pressable>
             );
           })}
-        </View>
-
-        {/* List of businesses */}
-        <ScrollView
-          contentContainerStyle={styles.listContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {filteredBusinesses.length === 0 ? (
-            <Card padding="lg" style={styles.emptyCard} tone="neutral">
-              <Icon color={Palette.inkMuted} name="search" size={28} />
-              <Text style={[TypeScale.headline, { color: Palette.ink, textAlign: 'center' }]}>
-                No encontramos negocios
-              </Text>
-              <Text style={[TypeScale.caption, { color: Palette.inkMuted, textAlign: 'center' }]}>
-                Prueba con otro término de búsqueda o selecciona otra categoría.
-              </Text>
-              <Button
-                label="Ver todos los negocios"
-                onPress={() => {
-                  setQuery('');
-                  setSelectedCategory('Todos');
-                }}
-                size="sm"
-                variant="secondary"
-              />
-            </Card>
-          ) : (
-            filteredBusinesses.map((item) => {
-              const availableCount = item.catalog.barbers.filter(
-                (b) => b.operationalState === 'disponible'
-              ).length;
-
-              return (
-                <Card key={item.businessId} padding="md" style={styles.businessCard}>
-                  <View style={styles.businessHeader}>
-                    <View style={styles.businessHeaderLeft}>
-                      <Text style={[TypeScale.headline, styles.businessName]}>{item.name}</Text>
-                      <View style={styles.metaRow}>
-                        <Pill
-                          label={item.categoryLabel}
-                          size="sm"
-                          tone={item.category === 'salud' ? 'brand' : item.category === 'atencion_cliente' ? 'gold' : 'neutral'}
-                        />
-                        <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>
-                          {item.district} · {item.distanceKm.toFixed(1)} km
-                        </Text>
-                      </View>
-                    </View>
-                    <Pill
-                      label={item.isOpen ? 'Abierto' : 'Cerrado'}
-                      size="sm"
-                      tone={item.isOpen ? 'success' : 'neutral'}
-                    />
-                  </View>
-
-                  <View style={styles.factsRow}>
-                    <View style={styles.factItem}>
-                      <Icon color={Palette.brand} name="ticket" size={14} />
-                      <Text style={styles.factText}>{item.catalog.services.length} servicios</Text>
-                    </View>
-                    <View style={styles.factItem}>
-                      <Icon color={Palette.brand} name="user" size={14} />
-                      <Text style={styles.factText}>
-                        {availableCount} {item.staffLabel.toLowerCase()}{availableCount === 1 ? '' : 's'} libres
-                      </Text>
-                    </View>
-                    <View style={styles.factItem}>
-                      <Icon color={Palette.goldDeep} name="clock" size={14} />
-                      <Text style={styles.factText}>~{item.etaMinutes} min espera</Text>
-                    </View>
-                  </View>
-
-                  <Button
-                    disabled={!item.isOpen}
-                    fullWidth
-                    iconRight="arrow-right"
-                    label={item.isOpen ? 'Hacer cola aquí' : 'Local cerrado'}
-                    onPress={() => handleSelect(item)}
-                    size="md"
-                    variant={item.isOpen ? 'primary' : 'secondary'}
-                  />
-                </Card>
-              );
-            })
-          )}
         </ScrollView>
+
+        {loading ? (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color="#0F172A" />
+            <Text style={styles.helperText}>Cargando empresas disponibles...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={businesses}
+            keyExtractor={(item) => item.businessId}
+            contentContainerStyle={styles.listContent}
+            ListEmptyComponent={
+              <View style={styles.centered}>
+                <Text style={styles.emptyTitle}>No encontramos empresas con ese filtro</Text>
+                <Text style={styles.helperText}>
+                  Prueba seleccionando &quot;Todos&quot; o borrando el texto de búsqueda.
+                </Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <View style={styles.businessCard}>
+                <View style={styles.badgeRow}>
+                  <Text style={styles.categoryBadge}>{item.categoryLabel}</Text>
+                  <Text
+                    style={[
+                      styles.statusBadge,
+                      item.isOpen ? styles.statusOpen : styles.statusClosed,
+                    ]}
+                  >
+                    {item.isOpen ? `Abierto · ~${item.etaMinutes} min` : 'Cerrado'}
+                  </Text>
+                </View>
+
+                <Text style={styles.businessName}>{item.name}</Text>
+                <Text style={styles.businessAddress}>
+                  {item.district} · Código: {item.code}
+                </Text>
+
+                <Pressable
+                  onPress={() => onSelectBusiness(item)}
+                  style={styles.enterButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Entrar a la fila de ${item.name}`}
+                >
+                  <Text style={styles.enterButtonText}>Entrar a la fila</Text>
+                </Pressable>
+              </View>
+            )}
+          />
+        )}
       </View>
     </Modal>
   );
@@ -192,106 +176,168 @@ export function BusinessPickerModal({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: Palette.canvas,
     flex: 1,
-    paddingHorizontal: space(4),
-    paddingTop: space(6),
+    backgroundColor: '#F8FAFC',
+    paddingTop: 20,
   },
-  topBar: {
-    alignItems: 'center',
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingBottom: space(3),
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
   },
-  titleWrap: {
-    gap: 2,
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  headerSubtitle: {
+    fontSize: 15,
+    color: '#475569',
+    marginTop: 2,
   },
   closeButton: {
-    alignItems: 'center',
-    backgroundColor: Palette.brandSoftest,
-    borderColor: Palette.border,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    height: 40,
+    minHeight: 48,
+    minWidth: 72,
     justifyContent: 'center',
-    width: 40,
+    alignItems: 'flex-end',
   },
-  searchWrap: {
-    paddingBottom: space(3),
+  closeButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
   },
-  categoriesRow: {
+  searchBox: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: space(2),
-    paddingBottom: space(3),
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    marginHorizontal: 20,
+    paddingHorizontal: 14,
+    minHeight: 52,
+    gap: 10,
   },
-  categoryChip: {
-    backgroundColor: Palette.surface,
-    borderColor: Palette.border,
-    borderRadius: Radius.pill,
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#0F172A',
+  },
+  clearBtn: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  clearText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  chipsContainer: {
+    maxHeight: 58,
+    marginTop: 12,
+  },
+  chipsRow: {
+    paddingHorizontal: 20,
+    gap: 8,
+    alignItems: 'center',
+  },
+  chip: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    paddingHorizontal: space(3),
-    paddingVertical: space(2),
+    borderColor: '#CBD5E1',
+    justifyContent: 'center',
   },
-  categoryChipSelected: {
-    backgroundColor: Palette.brand,
-    borderColor: Palette.brand,
+  chipActive: {
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
-  categoryChipText: {
-    color: Palette.inkMuted,
-    fontSize: 13,
-    fontWeight: '600',
+  chipText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
   },
-  categoryChipTextSelected: {
+  chipTextActive: {
     color: '#FFFFFF',
   },
   listContent: {
-    gap: space(3),
-    paddingBottom: space(8),
+    padding: 20,
+    gap: 14,
   },
   businessCard: {
-    gap: space(3),
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 8,
   },
-  businessHeader: {
-    alignItems: 'flex-start',
+  badgeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
   },
-  businessHeaderLeft: {
-    flex: 1,
-    gap: space(1),
+  categoryBadge: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusBadge: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  statusOpen: {
+    color: '#15803D',
+  },
+  statusClosed: {
+    color: '#B91C1C',
   },
   businessName: {
-    color: Palette.ink,
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
   },
-  metaRow: {
+  businessAddress: {
+    fontSize: 15,
+    color: '#475569',
+  },
+  enterButton: {
+    marginTop: 6,
+    minHeight: 52,
+    borderRadius: 14,
+    backgroundColor: '#0F172A',
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: space(2),
+    justifyContent: 'center',
   },
-  factsRow: {
+  enterButtonText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  centered: {
+    padding: 32,
     alignItems: 'center',
-    backgroundColor: Palette.canvas,
-    borderRadius: Radius.medium,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: space(3),
-    paddingHorizontal: space(3),
-    paddingVertical: space(2),
+    gap: 10,
   },
-  factItem: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: space(1),
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+    textAlign: 'center',
   },
-  factText: {
-    color: Palette.ink,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  emptyCard: {
-    alignItems: 'center',
-    gap: space(2),
-    marginTop: space(4),
+  helperText: {
+    fontSize: 15,
+    color: '#475569',
+    textAlign: 'center',
   },
 });

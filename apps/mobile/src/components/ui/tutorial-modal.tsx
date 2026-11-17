@@ -1,166 +1,148 @@
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Icon } from './icon';
 
-import { Button, Card, Icon, type IconName } from '@/components/ui';
-import { Palette, Radius, space, TypeScale } from '@/constants/theme';
-
-export type TutorialStep = {
-  id: number;
+export interface TutorialStep {
+  stepNumber: number;
   title: string;
-  headline: string;
   description: string;
   tip: string;
-  icon: IconName;
-};
+  iconName: string;
+}
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
   {
-    id: 1,
-    title: 'Paso 1 de 4',
-    headline: 'Elige tu negocio',
-    description: 'Encuentra el establecimiento en la lista o escanea el código QR que está en el mostrador del local.',
-    tip: 'No necesitas esperar de pie ni adivinar cuánto falta.',
-    icon: 'storefront',
+    stepNumber: 1,
+    title: 'Elige o escanea tu negocio',
+    description:
+      'Toca "Seleccionar empresa" para buscar el lugar en la lista, o apunta tu cámara al código QR que está en el local.',
+    tip: 'No necesitas saber códigos de memoria.',
+    iconName: 'storefront-outline',
   },
   {
-    id: 2,
-    title: 'Paso 2 de 4',
-    headline: 'Pide tu turno al instante',
-    description: 'Elige el servicio que necesitas. ¡Sin crear contraseñas ni llenar formularios complicados!',
-    tip: 'Tu lugar queda asegurado en tu teléfono de inmediato.',
-    icon: 'ticket',
+    stepNumber: 2,
+    title: 'Pide tu turno sin registros',
+    description:
+      'Elige qué atención necesitas y escribe solo tu nombre. Sin contraseñas ni formularios largos.',
+    tip: 'Toma menos de 20 segundos.',
+    iconName: 'ticket-outline',
   },
   {
-    id: 3,
-    title: 'Paso 3 de 4',
-    headline: 'Espera donde prefieras',
-    description: 'Puedes sentarte, tomar un café o hacer tus pendientes cerca mientras ves en tiempo real cuántas personas faltan.',
-    tip: 'La pantalla te muestra el tiempo estimado de espera en vivo.',
-    icon: 'clock',
+    stepNumber: 3,
+    title: 'Espera donde prefieras',
+    description:
+      'Puedes sentarte, caminar o tomar un café. En tu pantalla verás cuántas personas faltan y el tiempo aproximado.',
+    tip: 'Tu lugar en la fila está asegurado.',
+    iconName: 'time-outline',
   },
   {
-    id: 4,
-    title: 'Paso 4 de 4',
-    headline: '¡Te avisamos cuando te toque!',
-    description: 'Tu celular te notificará cuando sea tu turno. Solo acércate al mostrador o con el personal cuando te llamen.',
-    tip: '¡Listo! Así de simple es usar Turnify sin perder tu tiempo.',
-    icon: 'bell',
+    stepNumber: 4,
+    title: '¡Te avisamos cuando te toque!',
+    description:
+      'Cuando sea tu momento, tu celular sonará y cambiará de color para que te acerques con tranquilidad.',
+    tip: 'Siempre tendrás unos minutos de tolerancia para llegar.',
+    iconName: 'notifications-outline',
   },
 ];
 
-export type TutorialModalProps = {
+interface TutorialModalProps {
   visible: boolean;
   onClose: () => void;
-};
+}
 
 export function TutorialModal({ visible, onClose }: TutorialModalProps) {
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-  const step = TUTORIAL_STEPS[currentStep];
-  const isFirst = currentStep === 0;
-  const isLast = currentStep === TUTORIAL_STEPS.length - 1;
+  useEffect(() => {
+    if (visible) {
+      setCurrentIndex(0);
+    }
+  }, [visible]);
 
-  function next() {
+  const step = TUTORIAL_STEPS[currentIndex];
+  const isFirst = currentIndex === 0;
+  const isLast = currentIndex === TUTORIAL_STEPS.length - 1;
+
+  const handleNext = () => {
     if (isLast) {
-      setCurrentStep(0);
       onClose();
     } else {
-      setCurrentStep((prev) => prev + 1);
+      setCurrentIndex((prev) => Math.min(prev + 1, TUTORIAL_STEPS.length - 1));
     }
-  }
+  };
 
-  function prev() {
-    if (!isFirst) {
-      setCurrentStep((prev) => prev - 1);
-    }
-  }
-
-  function handleSkip() {
-    setCurrentStep(0);
-    onClose();
-  }
+  const handlePrev = () => {
+    setCurrentIndex((prev) => Math.max(prev - 1, 0));
+  };
 
   return (
     <Modal
-      animationType="fade"
-      hardwareAccelerated
-      onRequestClose={handleSkip}
-      transparent
       visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+      accessibilityViewIsModal
     >
       <View style={styles.backdrop}>
-        <View style={styles.modalCard}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={[TypeScale.eyebrow, { color: Palette.brandDeep }]}>{step.title}</Text>
+        <View style={styles.card}>
+          <View style={styles.topRow}>
+            <Text style={styles.stepIndicator}>
+              Paso {step.stepNumber} de {TUTORIAL_STEPS.length}
+            </Text>
             <Pressable
-              accessibilityLabel="Saltar tutorial"
-              accessibilityRole="button"
-              hitSlop={12}
-              onPress={handleSkip}
+              onPress={onClose}
               style={styles.skipButton}
+              accessibilityRole="button"
+              accessibilityLabel="Saltar tutorial"
             >
               <Text style={styles.skipText}>Saltar</Text>
             </Pressable>
           </View>
 
-          {/* Visual Icon Illustration */}
-          <View style={styles.iconCircle}>
-            <Icon color={Palette.brand} name={step.icon} size={36} strokeWidth={2.2} />
-          </View>
-
-          {/* Step content */}
-          <View style={styles.body}>
-            <Text style={[TypeScale.h2, styles.headline]}>{step.headline}</Text>
-            <Text style={[TypeScale.body, styles.description]}>{step.description}</Text>
-          </View>
-
-          {/* Reassuring Tip Box */}
-          <Card padding="sm" style={styles.tipCard} tone="brand">
-            <View style={styles.tipRow}>
-              <Icon color={Palette.brand} name="check-circle" size={18} />
-              <Text style={[TypeScale.caption, styles.tipText]}>{step.tip}</Text>
-            </View>
-          </Card>
-
-          {/* Step indicator dots */}
           <View style={styles.dotsRow}>
-            {TUTORIAL_STEPS.map((s, idx) => {
-              const active = idx === currentStep;
-              return (
-                <View
-                  key={s.id}
-                  style={[
-                    styles.dot,
-                    active ? styles.dotActive : styles.dotInactive,
-                  ]}
-                />
-              );
-            })}
+            {TUTORIAL_STEPS.map((item, idx) => (
+              <View
+                key={item.stepNumber}
+                style={[styles.dot, idx === currentIndex && styles.dotActive]}
+              />
+            ))}
           </View>
 
-          {/* Navigation Controls */}
-          <View style={styles.actions}>
+          <View style={styles.iconCircle}>
+            <Icon name={step.iconName as any} size={44} color="#0F172A" />
+          </View>
+
+          <Text style={styles.title}>{step.title}</Text>
+          <Text style={styles.description}>{step.description}</Text>
+
+          <View style={styles.tipBox}>
+            <Text style={styles.tipText}>{step.tip}</Text>
+          </View>
+
+          <View style={styles.actionsRow}>
             {!isFirst ? (
-              <View style={styles.actionButtonHalf}>
-                <Button
-                  fullWidth
-                  label="Anterior"
-                  onPress={prev}
-                  size="md"
-                  variant="secondary"
-                />
-              </View>
-            ) : null}
-            <View style={isFirst ? styles.actionButtonFull : styles.actionButtonHalf}>
-              <Button
-                fullWidth
-                label={isLast ? '¡Entendido, empezar!' : 'Siguiente'}
-                onPress={next}
-                size="md"
-                variant="primary"
-              />
-            </View>
+              <Pressable
+                onPress={handlePrev}
+                style={styles.secondaryButton}
+                accessibilityRole="button"
+                accessibilityLabel="Paso anterior"
+              >
+                <Text style={styles.secondaryButtonText}>Anterior</Text>
+              </Pressable>
+            ) : (
+              <View style={styles.buttonSpacer} />
+            )}
+
+            <Pressable
+              onPress={handleNext}
+              style={styles.primaryButton}
+              accessibilityRole="button"
+              accessibilityLabel={isLast ? 'Empezar ahora' : 'Siguiente paso'}
+            >
+              <Text style={styles.primaryButtonText}>
+                {isLast ? 'Empezar ahora' : 'Siguiente'}
+              </Text>
+            </Pressable>
           </View>
         </View>
       </View>
@@ -170,107 +152,124 @@ export function TutorialModal({ visible, onClose }: TutorialModalProps) {
 
 const styles = StyleSheet.create({
   backdrop: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(10, 15, 29, 0.65)',
     flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
     justifyContent: 'center',
-    padding: space(4),
+    padding: 20,
   },
-  modalCard: {
-    backgroundColor: Palette.surface,
-    borderColor: Palette.border,
-    borderRadius: Radius.large,
-    borderWidth: 1,
-    gap: space(4),
-    maxWidth: 420,
-    padding: space(5),
-    width: '100%',
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    gap: 16,
   },
-  header: {
-    alignItems: 'center',
+  topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '100%',
+    alignItems: 'center',
+  },
+  stepIndicator: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#475569',
   },
   skipButton: {
-    minHeight: 32,
-    minWidth: 48,
-    paddingHorizontal: space(2),
-    paddingVertical: space(1),
+    minHeight: 48,
+    minWidth: 72,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
   },
   skipText: {
-    color: Palette.inkMuted,
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    textDecorationLine: 'underline',
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dot: {
+    flex: 1,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#E2E8F0',
+  },
+  dotActive: {
+    backgroundColor: '#0F172A',
   },
   iconCircle: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: Palette.brandSoftest,
-    borderColor: Palette.border,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    height: 72,
     justifyContent: 'center',
-    width: 72,
+    alignSelf: 'center',
+    marginTop: 4,
   },
-  body: {
-    alignItems: 'center',
-    gap: space(2),
-    textAlign: 'center',
-  },
-  headline: {
-    color: Palette.ink,
+  title: {
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '800',
+    color: '#0F172A',
     textAlign: 'center',
   },
   description: {
-    color: Palette.inkMuted,
-    lineHeight: 22,
+    fontSize: 18,
+    lineHeight: 26,
+    color: '#1E293B',
     textAlign: 'center',
   },
-  tipCard: {
-    backgroundColor: Palette.brandSoftest,
-    borderColor: Palette.border,
-    borderRadius: Radius.medium,
-  },
-  tipRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: space(2),
+  tipBox: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
   },
   tipText: {
-    color: Palette.brandDeep,
-    flex: 1,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#334155',
+    textAlign: 'center',
   },
-  dotsRow: {
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  buttonSpacer: {
+    flex: 1,
+  },
+  secondaryButton: {
+    flex: 1,
+    minHeight: 54,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#0F172A',
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: space(2),
     justifyContent: 'center',
-    paddingVertical: space(1),
+    paddingHorizontal: 16,
   },
-  dot: {
-    borderRadius: Radius.pill,
-    height: 8,
+  secondaryButtonText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0F172A',
   },
-  dotActive: {
-    backgroundColor: Palette.brand,
-    width: 24,
+  primaryButton: {
+    flex: 1.4,
+    minHeight: 54,
+    borderRadius: 14,
+    backgroundColor: '#0F172A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
   },
-  dotInactive: {
-    backgroundColor: Palette.border,
-    width: 8,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: space(2),
-    width: '100%',
-  },
-  actionButtonFull: {
-    flex: 1,
-  },
-  actionButtonHalf: {
-    flex: 1,
+  primaryButtonText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 });
