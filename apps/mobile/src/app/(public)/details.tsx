@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { useBusinessRubro } from '@/features/public/use-business-rubro';
 
 import { BrandBar, Button, Card, Icon, IconButton, Screen, StickyBar, StepTracker, TextField } from '@/components/ui';
 import { CustomerPage, CustomerState } from '@/components/customer/customer-ui';
@@ -39,6 +40,8 @@ export default function DetailsScreen() {
   const [showOptional, setShowOptional] = useState(Boolean(draft?.details.ageRange || draft?.details.gender));
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const rubroInfo = useBusinessRubro(draft?.companyCode);
+  const staffSingular = rubroInfo.staffLabel.toLowerCase();
 
   if (!draft?.serviceId) {
     return (

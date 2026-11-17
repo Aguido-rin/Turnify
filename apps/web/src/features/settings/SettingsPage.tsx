@@ -3,8 +3,13 @@ import QRCode from 'qrcode';
 
 import { Badge, Button, ConfirmModal, Modal, PageHeader, SectionCard, SelectField, StatsRow, SwitchField } from '@/components/common';
 import { Icon } from '@/components/Icon';
+import {
+  WEB_RUBRO_OPTIONS,
+  getDefaultAtendedorForRubro,
+  type WebBusinessRubro,
+} from '@/data/labels';
 import { fetchShopSettings, saveShopSettings, type ShopSettings } from '@/data/live';
-import { isSupabaseConfigured } from '@/data/supabase';
+import { isSupabaseConfigured, supabase } from '@/data/supabase';
 import { useShop } from '@/state/ShopContext';
 import { ShopLocationPicker } from './ShopLocationPicker';
 import type { ShopPoint } from './shop-location';
@@ -72,6 +77,8 @@ export function SettingsPage() {
   const [showDiscard, setShowDiscard] = useState(false);
   const [togglingOpen, setTogglingOpen] = useState(false);
   const [shopName, setShopName] = useState('');
+  const [rubro, setRubro] = useState<WebBusinessRubro>('general');
+  const [etiquetaAtendedor, setEtiquetaAtendedor] = useState('Profesional');
 
   useEffect(() => {
     let active = true;
@@ -82,7 +89,7 @@ export function SettingsPage() {
     }
 
     fetchShopSettings()
-      .then((settings: ShopSettings) => {
+      .then(async (settings: ShopSettings) => {
         if (!active) return;
         setConfig({
           open: settings.open,
@@ -95,7 +102,22 @@ export function SettingsPage() {
         });
         setIdentity({ name: settings.name, code: settings.code, timezone: settings.timezone });
         setShopName(settings.name);
-        setLoading(false);
+
+        if (supabase && settings.code) {
+          const { data: emp } = await supabase
+            .from('empresas')
+            .select('rubro, etiqueta_atendedor')
+            .eq('codigo', settings.code)
+            .maybeSingle();
+
+          if (active && emp) {
+            const nextRubro = (emp.rubro as WebBusinessRubro) ?? 'general';
+            setRubro(nextRubro);
+            setEtiquetaAtendedor(emp.etiqueta_atendedor || getDefaultAtendedorForRubro(nextRubro));
+          }
+        }
+
+        if (active) setLoading(false);
       })
       .catch(() => {
         if (active) setLoading(false);
@@ -158,7 +180,7 @@ export function SettingsPage() {
     }
   }
 
-  function save(event?: FormEvent) {
+  async function save(event?: FormEvent) {
     event?.preventDefault();
 
     if (!isSupabaseConfigured()) {
@@ -171,33 +193,45 @@ export function SettingsPage() {
     setError(null);
 
     if (!shopName.trim()) {
-      setError('El nombre de la barbería es obligatorio.');
+      setError('El nombre del negocio es obligatorio.');
       return;
     }
 
     setStatus('saving');
 
-    saveShopSettings({ ...config, shopName: shopName.trim() })
-      .then(() => {
-        setStatus('idle');
-        setSaved(true);
-        setIdentity((current) => (current ? { ...current, name: shopName.trim() } : current));
-        refreshShop();
-        setLastModified(
-          new Date().toLocaleString('es-PE', {
-            timeZone: 'America/Lima',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            month: 'short',
-            year: 'numeric',
-          }),
-        );
-      })
-      .catch(() => {
-        setStatus('idle');
-        setError('No pudimos guardar en el servidor. Intenta de nuevo.');
-      });
+    try {
+      await saveShopSettings({ ...config, shopName: shopName.trim() });
+
+      if (supabase && identity?.code) {
+        const { error: rubroError } = await supabase
+          .from('empresas')
+          .update({
+            rubro,
+            etiqueta_atendedor: etiquetaAtendedor.trim() || getDefaultAtendedorForRubro(rubro),
+          })
+          .eq('codigo', identity.code);
+
+        if (rubroError) throw rubroError;
+      }
+
+      setStatus('idle');
+      setSaved(true);
+      setIdentity((current) => (current ? { ...current, name: shopName.trim() } : current));
+      refreshShop();
+      setLastModified(
+        new Date().toLocaleString('es-PE', {
+          timeZone: 'America/Lima',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        }),
+      );
+    } catch {
+      setStatus('idle');
+      setError('No pudimos guardar en el servidor. Intenta de nuevo.');
+    }
   }
 
   function reset() {
@@ -206,30 +240,47 @@ export function SettingsPage() {
 
     if (!isSupabaseConfigured()) {
       setConfig(demoConfig);
+      setRubro('general');
+      setEtiquetaAtendedor('Profesional');
       return;
     }
 
     setLoading(true);
     fetchShopSettings()
-      .then((settings: ShopSettings) => {
+      .then(async (settings: ShopSettings) => {
         setConfig({
           open: settings.open,
           graceMinutes: settings.graceMinutes,
           noticeAhead: settings.noticeAhead,
           preferentialEvery: settings.preferentialEvery,
-           shopLatitude: settings.shopLatitude,
-           shopLongitude: settings.shopLongitude,
-            shopAddress: settings.shopAddress,
+          shopLatitude: settings.shopLatitude,
+          shopLongitude: settings.shopLongitude,
+          shopAddress: settings.shopAddress,
         });
         setShopName(settings.name);
         setIdentity({ name: settings.name, code: settings.code, timezone: settings.timezone });
+
+        if (supabase && settings.code) {
+          const { data: emp } = await supabase
+            .from('empresas')
+            .select('rubro, etiqueta_atendedor')
+            .eq('codigo', settings.code)
+            .maybeSingle();
+
+          if (emp) {
+            const nextRubro = (emp.rubro as WebBusinessRubro) ?? 'general';
+            setRubro(nextRubro);
+            setEtiquetaAtendedor(emp.etiqueta_atendedor || getDefaultAtendedorForRubro(nextRubro));
+          }
+        }
+
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }
 
   return (
-    <form onSubmit={save}>
+    <form onSubmit={(e) => void save(e)}>
       <PageHeader
         title="Configuración"
         subtitle="Reglas vivas del local: lo que cambies aquí mueve la app y el panel."
@@ -277,7 +328,7 @@ export function SettingsPage() {
         <Divider />
 
         <label className="field">
-          <span>Nombre de la barbería</span>
+          <span>Nombre del negocio</span>
           <input
             disabled={loading || status === 'saving'}
             maxLength={80}
@@ -286,12 +337,57 @@ export function SettingsPage() {
               setError(null);
               setShopName(event.target.value);
             }}
-            placeholder="Ej. Barba Negra"
+            placeholder="Ej. Clínica Sanitas / Barba Negra"
             type="text"
             value={shopName}
           />
           <small>Se muestra en la app, el QR y el panel al guardar.</small>
         </label>
+
+        <Divider />
+
+        <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          <label className="field">
+            <span>Rubro del negocio</span>
+            <select
+              disabled={loading || status === 'saving'}
+              onChange={(event) => {
+                setSaved(false);
+                setError(null);
+                const nextRubro = event.target.value as WebBusinessRubro;
+                setRubro(nextRubro);
+                setEtiquetaAtendedor(getDefaultAtendedorForRubro(nextRubro));
+              }}
+              value={rubro}
+            >
+              {WEB_RUBRO_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <small>Adapta los textos y el flujo de atención para tus clientes.</small>
+          </label>
+
+          <label className="field">
+            <span>¿Cómo llamas a quien atiende?</span>
+            <input
+              disabled={loading || status === 'saving'}
+              maxLength={40}
+              onChange={(event) => {
+                setSaved(false);
+                setError(null);
+                setEtiquetaAtendedor(event.target.value);
+              }}
+              placeholder="Ej. Barbero, Médico, Asesor, Módulo"
+              type="text"
+              value={etiquetaAtendedor}
+            />
+            <small>Se mostrará como «Elige tu {etiquetaAtendedor.trim().toLowerCase() || 'profesional'}».</small>
+          </label>
+        </div>
+
+        <Divider />
 
         <div style={{ display: 'grid', gap: 8 }}>
           <div className="muted" style={{ font: 'var(--text-body)' }}>
@@ -372,7 +468,7 @@ export function SettingsPage() {
               ? { lat: config.shopLatitude, lng: config.shopLongitude }
               : null
           }
-           onChange={(point: ShopPoint | null) => {
+          onChange={(point: ShopPoint | null) => {
             setSaved(false);
             setError(null);
             setConfig((current) => ({
@@ -380,10 +476,10 @@ export function SettingsPage() {
               shopLatitude: point?.lat ?? null,
               shopLongitude: point?.lng ?? null,
             }));
-           }}
-           address={config.shopAddress}
-           onAddressChange={(address) => update('shopAddress', address)}
-           disabled={status === 'saving'}
+          }}
+          address={config.shopAddress}
+          onAddressChange={(address) => update('shopAddress', address)}
+          disabled={status === 'saving'}
         />
       </SectionCard>
 
@@ -472,11 +568,11 @@ export function SettingsPage() {
             <span className="muted">{ticketUrl}</span>
           </div>
 
-            <p className="muted" style={{ margin: 0 }}>
-              {config.open
-                ? 'El local recibe turnos: este código acepta turnos nuevos.'
-                : 'Local cerrado: el papel sigue en el mostrador, pero el servidor rechaza turnos nuevos hasta reabrir.'}
-            </p>
+          <p className="muted" style={{ margin: 0 }}>
+            {config.open
+              ? 'El local recibe turnos: este código acepta turnos nuevos.'
+              : 'Local cerrado: el papel sigue en el mostrador, pero el servidor rechaza turnos nuevos hasta reabrir.'}
+          </p>
         </Modal>
       ) : null}
     </form>

@@ -38,6 +38,19 @@ export interface LocalBarber {
   currentTicketId: string | null;
 }
 
+export interface LocalEmpresaRecord {
+  id: string;
+  nombre: string;
+  codigo: string;
+  rubro: 'barberia' | 'salud' | 'atencion_cliente' | 'gastronomia' | 'retail' | 'general';
+  etiqueta_atendedor: string;
+  descripcion?: string | null;
+  abierta: boolean;
+  direccion?: string | null;
+  latitud?: number | null;
+  longitud?: number | null;
+}
+
 export interface LocalStoreState {
   business: {
     id: string;

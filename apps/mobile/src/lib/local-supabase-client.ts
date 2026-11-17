@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { localDb } from './local-db';
+import { BUSINESS_DIRECTORY } from '../features/customer/business-directory';
 
 export function createLocalSupabaseClient(): SupabaseClient {
   const authListeners = new Set<(event: string, session: unknown) => void>();
@@ -17,6 +18,75 @@ export function createLocalSupabaseClient(): SupabaseClient {
     async rpc(fnName: string, args: Record<string, unknown> = {}) {
       try {
         switch (fnName) {
+          case 'listar_empresas_publicas': {
+            const busqueda = String(args?.p_busqueda ?? '').trim().toLowerCase();
+            const rubro = String(args?.p_rubro ?? '').trim().toLowerCase();
+            const limit = Math.min(Math.max(Number(args?.p_limit ?? 30), 1), 50);
+
+            const rows = BUSINESS_DIRECTORY
+              .filter((e) => {
+                const matchRubro = !rubro || rubro === 'all' || e.category === rubro;
+                const matchQuery =
+                  !busqueda ||
+                  e.name.toLowerCase().includes(busqueda) ||
+                  e.code.toLowerCase().includes(busqueda) ||
+                  e.district.toLowerCase().includes(busqueda);
+                return matchRubro && matchQuery;
+              })
+              .slice(0, limit)
+              .map((e) => ({
+                id: e.businessId,
+                nombre: e.name,
+                codigo: e.code,
+                rubro: e.category,
+                etiqueta_atendedor: e.staffLabel,
+                descripcion: null,
+                abierta: e.isOpen,
+                direccion: e.district,
+                latitud: null,
+                longitud: null,
+              }));
+
+            return { data: rows, error: null };
+          }
+
+          case 'obtener_perfil_publico_empresa': {
+            const codigo = String(args?.p_codigo ?? '').trim().toUpperCase();
+            const found = BUSINESS_DIRECTORY.find((e) => e.code.trim().toUpperCase() === codigo);
+            if (found) {
+              return {
+                data: [
+                  {
+                    id: found.businessId,
+                    nombre: found.name,
+                    codigo: found.code,
+                    rubro: found.category,
+                    etiqueta_atendedor: found.staffLabel,
+                    descripcion: null,
+                    abierta: found.isOpen,
+                  },
+                ],
+                error: null,
+              };
+            }
+            if (codigo === 'BARBER1') {
+              return {
+                data: [
+                  {
+                    id: 'empresa-turnify-1',
+                    nombre: 'Turnify Barber Studio',
+                    codigo: 'BARBER1',
+                    rubro: 'barberia',
+                    etiqueta_atendedor: 'Barbero',
+                    descripcion: null,
+                    abierta: true,
+                  },
+                ],
+                error: null,
+              };
+            }
+            return { data: [], error: null };
+          }
           case 'catalogo_comercial':
             return { data: localDb.getCommercialCatalog(String(args.p_codigo ?? 'BARBER1')), error: null };
 

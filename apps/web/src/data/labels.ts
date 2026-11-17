@@ -86,3 +86,33 @@ export function averageOf(values: number[]): number {
 
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
+
+export type WebBusinessRubro =
+  | 'barberia'
+  | 'salud'
+  | 'atencion_cliente'
+  | 'gastronomia'
+  | 'retail'
+  | 'general';
+
+export const WEB_RUBRO_OPTIONS: Array<{
+  value: WebBusinessRubro;
+  label: string;
+  defaultAtendedor: string;
+}> = [
+  { value: 'barberia', label: 'Barbería y Estética', defaultAtendedor: 'Barbero' },
+  { value: 'salud', label: 'Salud y Consultorios', defaultAtendedor: 'Médico / Especialista' },
+  {
+    value: 'atencion_cliente',
+    label: 'Atención al Cliente y Trámites',
+    defaultAtendedor: 'Asesor / Módulo',
+  },
+  { value: 'gastronomia', label: 'Restaurantes y Cafeterías', defaultAtendedor: 'Anfitrión / Barra' },
+  { value: 'retail', label: 'Retail y Comercio', defaultAtendedor: 'Asesor / Caja' },
+  { value: 'general', label: 'Atención General', defaultAtendedor: 'Profesional' },
+];
+
+export function getDefaultAtendedorForRubro(rubro?: string | null): string {
+  const match = WEB_RUBRO_OPTIONS.find((item) => item.value === rubro);
+  return match?.defaultAtendedor ?? 'Profesional';
+}
