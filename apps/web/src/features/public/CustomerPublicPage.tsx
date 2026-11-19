@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
+import { useAutoQueueProgression } from '../../hooks/useAutoQueueProgression';
 
 import { Button } from '@/components/common/Button';
 import {
@@ -43,7 +44,19 @@ function CustomerBusinessPage({ businessCode }: { businessCode: string }) {
   const [phone, setPhone] = useState('');
   const [whatsappConsent, setWhatsappConsent] = useState(false);
   const [ratingSelection, setRatingSelection] = useState<number | null>(null);
+  const [liveTicket, setLiveTicket] = useState<GuestTicketState | null>(null);
+  const [liveUpdatedAt, setLiveUpdatedAt] = useState<number | null>(null);
 
+  useEffect(() => {
+    setLiveTicket(ticket);
+    setLiveUpdatedAt(updatedAt);
+  }, [ticket, updatedAt]);
+
+  useAutoQueueProgression(liveTicket, (next) => {
+    setLiveTicket(next);
+    setLiveUpdatedAt(Date.now());
+  });
+  
   useEffect(() => () => controller.dispose(), [controller]);
   useEffect(() => {
     let live = true;
@@ -87,8 +100,8 @@ function CustomerBusinessPage({ businessCode }: { businessCode: string }) {
   return (
     <main className="public-page">
       <header className="public-page__header"><span className="eyebrow">TURNIFY</span><span className="badge badge--brand">Sin instalar nada</span></header>
-      {access ? ticket ? (
-        <TicketView ticket={ticket} error={error} storageWarning={storageWarning} updatedAt={updatedAt} busy={busy} needsRefresh={needsRefresh} ratingSelection={ratingSelection}
+      {access ? liveTicket ? (
+        <TicketView ticket={liveTicket} error={error} storageWarning={storageWarning} updatedAt={liveUpdatedAt} busy={busy} needsRefresh={needsRefresh} ratingSelection={ratingSelection}
           onRatingSelection={setRatingSelection} onRate={() => { if (ratingSelection != null) void controller.rate(ratingSelection); }}
           onRespond={(response) => void controller.respond(response)} onRefresh={() => void controller.refresh()}
           onCancel={() => void controller.cancel()} onRestart={() => { controller.restart(); setRatingSelection(null); }} />

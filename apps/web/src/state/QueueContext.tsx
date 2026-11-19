@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react';
+import { WEB_AUTO_QUEUE_TIMINGS, advanceWebTicket } from '../hooks/useAutoQueueProgression';
 
 import { panelRepository } from '@/data/repositories';
 import { computeStats } from '@/data/compute';

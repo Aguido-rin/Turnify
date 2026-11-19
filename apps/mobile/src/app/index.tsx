@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useAutoQueueProgression } from '@/features/queue/use-live-ticket';
 
 import { BusinessPickerModal } from '@/components/customer/business-picker-modal';
 import { BrandMark, Button, Card, Icon, Pill, TextField, TutorialModal } from '@/components/ui';
@@ -40,6 +41,16 @@ export default function PublicWelcomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const { ticketAccess, hasActiveTicketAccess, settleGuestTicket, beginDiscovery } = useGuestFlow();
   const [activeTicket, setActiveTicket] = useState<GuestTicketState | null>(null);
+
+  const handleHomeAutoUpdate = useCallback(
+    (nextTicket: GuestTicketState) => {
+      setActiveTicket(nextTicket);
+      if (ticketAccess) settleGuestTicket(ticketAccess, nextTicket);
+    },
+    [settleGuestTicket, ticketAccess],
+  );
+  useAutoQueueProgression(activeTicket, handleHomeAutoUpdate);
+  
   const [isTicketLoading, setIsTicketLoading] = useState(false);
   const [ticketError, setTicketError] = useState<string | null>(null);
   const requests = useRef(new GuestTicketRequests()).current;

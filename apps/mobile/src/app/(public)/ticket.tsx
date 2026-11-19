@@ -2,6 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAutoQueueProgression } from '@/features/queue/use-live-ticket';
 import * as Haptics from 'expo-haptics';
 
 import { Button, Card, Icon, IconButton, Sheet } from '@/components/ui';
@@ -129,6 +130,22 @@ export default function GuestTicketScreen() {
     router.replace('/');
   }, [endGuestTicketSession, requests]);
 
+  const hasAutoProgressed = useRef(false);
+
+  const handleAutoTicketUpdate = useCallback(
+    (nextTicket: GuestTicketState) => {
+      hasAutoProgressed.current = true;
+      setTicket(nextTicket);
+      setUpdatedAt(new Date());
+      if (ticketAccess) {
+        settleGuestTicket(ticketAccess, nextTicket);
+      }
+    },
+    [settleGuestTicket, ticketAccess],
+  );
+
+  useAutoQueueProgression(ticket, handleAutoTicketUpdate);
+
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -149,6 +166,9 @@ export default function GuestTicketScreen() {
   }, [ticket?.status]);
 
   const refresh = useCallback(async () => {
+    if (hasAutoProgressed.current && !forceManual) {
+      return true;
+    }
     if (process.env.EXPO_PUBLIC_SKIP_AUTH === '1') {
       const source = demoTicket ?? DEFAULT_DEMO_TICKET;
       setTicket({
@@ -292,7 +312,7 @@ export default function GuestTicketScreen() {
   if (ticket && status?.isActiveTurn) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-        <TicketHeader isLoading={isLoading} updatedAt={updatedAt} error={error} onBack={returnHome} onRefresh={() => void refresh()} />
+        <TicketHeader isLoading={isLoading} updatedAt={updatedAt} error={error} onBack={returnHome} onRefresh={() => { hasAutoProgressed.current = false; void refresh(true); }} />
         <CustomerPage>
           <CalledGuestTicket
             error={error}
@@ -343,7 +363,7 @@ export default function GuestTicketScreen() {
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-      <TicketHeader isLoading={isLoading} updatedAt={updatedAt} error={error} onBack={returnHome} onRefresh={() => void refresh()} />
+      <TicketHeader isLoading={isLoading} updatedAt={updatedAt} error={error} onBack={returnHome} onRefresh={() => { hasAutoProgressed.current = false; void refresh(true); }} />
       <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
         {isLoading && !ticket ? <CustomerState isLoading label="Actualizando tu turno…" /> : null}
         {error ? <CustomerState action={() => void refresh()} label={error} /> : null}

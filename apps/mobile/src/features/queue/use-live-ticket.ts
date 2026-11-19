@@ -1,6 +1,9 @@
 import { useFocusEffect } from 'expo-router';
 import { AppState } from 'react-native';
 import { useCallback, useState } from 'react';
+import { useEffect } from 'react';
+import { AUTO_QUEUE_TIMINGS, advanceTicketAutomatically } from './auto-queue-engine';
+import type { GuestTicketState } from './public-guest-ticket-api';
 
 import { getMyTicketState, translateQueueError, type TicketState } from '@/features/queue/queue-api';
 import { getSupabase } from '@/lib/supabase';
@@ -67,4 +70,37 @@ export function useLiveTicket(ticketId: string | undefined, queueId: string | un
   );
 
   return { ticket, error, isLoading, refresh };
+}
+
+export function useAutoQueueProgression(
+  ticket: GuestTicketState | null,
+  onTicketUpdated: (next: GuestTicketState) => void,
+  enabled = true,
+) {
+  useEffect(() => {
+    if (!enabled || !ticket) return;
+    if (
+      ticket.status === 'finalizado' ||
+      ticket.status === 'cancelado' ||
+      ticket.status === 'ausente'
+    ) {
+      return;
+    }
+
+    const delaySeconds =
+      ticket.status === 'llamado'
+        ? AUTO_QUEUE_TIMINGS.autoAttendAfterCallSeconds
+        : ticket.status === 'en_atencion'
+          ? AUTO_QUEUE_TIMINGS.serviceDurationSeconds
+          : AUTO_QUEUE_TIMINGS.stepWaitSeconds;
+
+    const timer = setTimeout(() => {
+      const result = advanceTicketAutomatically(ticket, Date.now());
+      if (result.changed) {
+        onTicketUpdated(result.ticket);
+      }
+    }, delaySeconds * 1000);
+
+    return () => clearTimeout(timer);
+  }, [enabled, onTicketUpdated, ticket]);
 }

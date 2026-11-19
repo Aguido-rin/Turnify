@@ -120,8 +120,8 @@ export const BUSINESS_DIRECTORY: BusinessDirectoryEntry[] = [
       'Barbería Estilo Demo',
       true,
       [
-        service('svc-b-cut', 'Corte clásico', 'Corte de cabello y peinado.', 30),
-        service('svc-b-beard', 'Corte + barba', 'Corte integral y perfilado.', 45),
+        service('svc-b-cut', 'Corte clásico', 'Corte de cabello y peinado.', 1),
+        service('svc-b-beard', 'Corte + barba', 'Corte integral y perfilado.', 2),
       ],
       [
         staff('barb-001', 'Carlos Méndez', 'disponible', ['svc-b-cut', 'svc-b-beard']),
@@ -145,8 +145,8 @@ export const BUSINESS_DIRECTORY: BusinessDirectoryEntry[] = [
       'Centro Médico Sanitas Demo',
       true,
       [
-        service('svc-s-med', 'Medicina general', 'Consulta médica y evaluación rápida.', 20),
-        service('svc-s-triage', 'Triaje y control', 'Toma de presión, signos vitales y vacunas.', 15),
+        service('svc-s-med', 'Medicina general', 'Consulta médica y evaluación rápida.', 1),
+        service('svc-s-triage', 'Triaje y control', 'Toma de presión, signos vitales y vacunas.', 2),
       ],
       [
         staff('med-001', 'Dra. Valeria Gómez', 'disponible', ['svc-s-med', 'svc-s-triage']),
@@ -170,8 +170,8 @@ export const BUSINESS_DIRECTORY: BusinessDirectoryEntry[] = [
       'Atención al Ciudadano Demo',
       true,
       [
-        service('svc-a-rapida', 'Trámites y orientación', 'Consultas de documentos y expedientes.', 15),
-        service('svc-a-mesa', 'Mesa de partes rápida', 'Recepción y sellado de documentos.', 10),
+        service('svc-a-rapida', 'Trámites y orientación', 'Consultas de documentos y expedientes.', 1),
+        service('svc-a-mesa', 'Mesa de partes rápida', 'Recepción y sellado de documentos.', 2),
       ],
       [
         staff('ase-001', 'Módulo 1 · Ana Torres', 'disponible', ['svc-a-rapida', 'svc-a-mesa']),
