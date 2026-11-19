@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import type { FormEvent } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, FormEvent, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAutoQueueProgression } from '../../hooks/useAutoQueueProgression';
 
@@ -46,13 +45,17 @@ function CustomerBusinessPage({ businessCode }: { businessCode: string }) {
   const [ratingSelection, setRatingSelection] = useState<number | null>(null);
   const [liveTicket, setLiveTicket] = useState<GuestTicketState | null>(null);
   const [liveUpdatedAt, setLiveUpdatedAt] = useState<number | null>(null);
+  const autoProgressedRef = useRef(false);
 
   useEffect(() => {
-    setLiveTicket(ticket);
-    setLiveUpdatedAt(updatedAt);
+    if (!autoProgressedRef.current) {
+      setLiveTicket(ticket);
+      setLiveUpdatedAt(updatedAt);
+    }
   }, [ticket, updatedAt]);
 
   useAutoQueueProgression(liveTicket, (next) => {
+    autoProgressedRef.current = true;
     setLiveTicket(next);
     setLiveUpdatedAt(Date.now());
   });

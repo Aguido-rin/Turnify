@@ -4,6 +4,10 @@ import { AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoQueueProgression } from '@/features/queue/use-live-ticket';
 import * as Haptics from 'expo-haptics';
+import {
+  BUSINESS_DIRECTORY,
+  getBusinessCategoryLabel,
+} from '@/features/customer/business-directory';
 
 import { Button, Card, Icon, IconButton, Sheet } from '@/components/ui';
 import { CalledGuestTicket } from '@/components/customer/called-guest-ticket';
@@ -109,6 +113,16 @@ export default function GuestTicketScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const shopName = draft?.catalog.name ?? null;
+  const matchedBusiness =
+    BUSINESS_DIRECTORY.find(
+      (entry) =>
+        (shopName && entry.name.toLowerCase() === shopName.toLowerCase()) ||
+        (ticket?.serviceName &&
+          entry.catalog.services.some((s) => s.name === ticket.serviceName)),
+    ) ?? null;
+  const rubroLabel = matchedBusiness
+    ? getBusinessCategoryLabel(matchedBusiness.category).toLowerCase()
+    : null;
   const [isCancelling, setIsCancelling] = useState(false);
   const [isResponding, setIsResponding] = useState(false);
   const [isRating, setIsRating] = useState(false);
@@ -377,7 +391,7 @@ export default function GuestTicketScreen() {
                 <View>
                   <Text style={[TypeScale.bodyStrong, { color: Palette.ink }]}>{shopName ?? 'Turnify'}</Text>
                   <Text style={[TypeScale.caption, { color: Palette.inkMuted }]}>
-                    {shopName ? 'Tu turno en esta barbería' : 'Tu turno en la barbería'}
+                    {rubroLabel ? `Tu turno en ${rubroLabel}` : 'Tu turno en vivo'}
                   </Text>
                 </View>
               </View>
